@@ -1,32 +1,38 @@
-# CFC Forecaster — dev stack. api reads parquet (mounted), web proxies /api -> api.
-# Operational store = SQLite (deps/db.py); no Postgres. Single api process.
+# City Agent RISE — DEFAULT stack = SINGLE container (UI + API on one port).
+#
+#   docker compose --env-file .env.prod up -d --build      # plain command just works
+#   # or the helper:  bash deploy/up.sh
+#
+# One container serves the UI (/) and the API (/api) on ${HTTP_PORT}. No reverse proxy,
+# no /api-strip, no separate web container — nothing to misconfigure.
+#
+# Other stacks (only if you specifically need them):
+#   docker-compose.dev.yml     local dev (hot reload, vite :5173 + uvicorn :8000)
+#   docker-compose.nginx.yml   multi-container behind Nginx
+#   docker-compose.prod.yml    multi-container behind Caddy (auto-TLS)
+
 services:
-  api:
+  app:
     build:
       context: .
-      dockerfile: api/Dockerfile
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    working_dir: /app/api
+      dockerfile: Dockerfile.single
+    restart: always
+    env_file: .env.prod
+    ports:
+      - "${HTTP_PORT:-80}:8000"
     environment:
-      APP_ENV: dev
-      AUTH_DISABLED: "1"
       APP_DB_PATH: /app/appstore/app.db
     volumes:
-      - ./api:/app/api          # live code (reload)
-      - ./src:/app/src          # engine, importable
-      - ./data:/app/data        # parquet forecast data + writable outputs
-      - ./models:/app/models
+      - appstore:/app/appstore   # SQLite (users/audit/jobs)
+      - ./data:/app/data         # parquet + snapshot cache (optional; Fabric works without)
       - ./reports:/app/reports
-      - appstore:/app/appstore  # SQLite operational DB
-    ports: ["8000:8000"]
+      - ./models:/app/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
 
-  web:
-    image: node:20-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-    environment: { API_PROXY: "http://api:8000" }
-    volumes: ["./web:/app"]
-    ports: ["5173:5173"]
-    depends_on: [api]
-
-volumes: { appstore: {} }
+volumes:
+  appstore:

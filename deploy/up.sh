@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 MODE="${1:-single}"
 case "$MODE" in
-  single) COMPOSE="docker-compose.single.yml" ;;
+  single) COMPOSE="docker-compose.yml" ;;          # default = single container
   nginx)  COMPOSE="docker-compose.nginx.yml" ;;
   caddy)  COMPOSE="docker-compose.prod.yml" ;;
   *) echo "unknown mode '$MODE' (use: single | nginx | caddy)"; exit 1 ;;
@@ -24,7 +24,8 @@ if [ ! -f .env.prod ]; then
 fi
 
 # stop any previously-running variant so ports don't clash
-for f in docker-compose.yml docker-compose.prod.yml docker-compose.nginx.yml docker-compose.single.yml; do
+docker compose down --remove-orphans 2>/dev/null || true
+for f in docker-compose.yml docker-compose.dev.yml docker-compose.prod.yml docker-compose.nginx.yml docker-compose.single.yml; do
   [ -f "$f" ] && docker compose -f "$f" --env-file .env.prod down 2>/dev/null || true
 done
 

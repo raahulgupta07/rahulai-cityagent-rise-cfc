@@ -88,6 +88,25 @@ def hydrate_from_fabric() -> None:
         except Exception as exc:
             log.warning("hydrate order_plan failed: %s", exc)
 
+    # ── demand_panel (Demand EDA): from cfc_features (revenue approx = y*ListPrice, no txns) ──
+    dm_path = RAW / "demand_panel.parquet"
+    if not dm_path.exists():
+        try:
+            dm = pd.DataFrame(fabric.q(
+                "SELECT date,BranchId,ProductId,y,ListPrice FROM cfc_features"))
+            if len(dm):
+                dm["DayKey"] = pd.to_datetime(dm["date"]).dt.strftime("%Y%m%d")
+                dm["net_units"] = pd.to_numeric(dm["y"], errors="coerce").fillna(0.0)
+                lp = pd.to_numeric(dm["ListPrice"], errors="coerce").fillna(0.0)
+                dm["amount"] = dm["net_units"] * lp
+                dm["discount"] = 0.0
+                dm["txns"] = 0
+                dm = dm[["DayKey", "BranchId", "ProductId", "net_units", "amount", "discount", "txns"]]
+                dm.to_parquet(dm_path, index=False)
+                log.info("hydrate: wrote %s (%d rows from Fabric cfc_features)", dm_path.name, len(dm))
+        except Exception as exc:
+            log.warning("hydrate demand_panel failed: %s", exc)
+
     # ── backtest_preds (larger): direct copy of cfc_backtest_preds ──
     if not bt_path.exists():
         try:

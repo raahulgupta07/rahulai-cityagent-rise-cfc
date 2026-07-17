@@ -7,6 +7,8 @@ COPY package*.json ./
 # to npm install on a fresh clone. (ci = reproducible when a lockfile is present.)
 RUN npm ci || npm install --no-audit --no-fund
 COPY . .
+# this image is the standalone Node server (multi-container stacks) → adapter-node
+ENV ADAPTER=node
 RUN npm run build
 
 # Stage 2: runtime

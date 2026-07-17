@@ -10,12 +10,20 @@ Production posture (APP_ENV=production):
 Dev posture stays permissive.
 """
 from __future__ import annotations
-import logging, os
+import logging, os, pathlib
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from routes import all_routers
+
+# Single-container mode (OpenWebUI-style): if the built SPA is baked in (WEB_DIST set +
+# present), this ONE process serves the UI at / and the API at /api — no separate web
+# container, no reverse proxy, no /api-strip config. Everything on one port.
+WEB_DIST = pathlib.Path(os.getenv("WEB_DIST", "")) if os.getenv("WEB_DIST") else None
+SERVE_SPA = bool(WEB_DIST and (WEB_DIST / "index.html").exists())
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -88,13 +96,15 @@ def health():
             "analytics_ready": analytics_ready, "detail": detail}
 
 
-# Mount every router TWICE: at root (/auth, /overview, …) AND under /api (/api/auth, …).
-# The SPA calls /api/*; a front proxy that strips /api hits the root mount, one that does
-# NOT strip hits the /api mount — so login works regardless of proxy config. Bulletproofs
-# the whole "/api prefix" class of deploy errors.
+# API mounting:
+#  - Always under /api (/api/auth, /api/overview, …) — what the SPA calls.
+#  - ALSO at root (/auth, …) ONLY in multi-container mode, so a proxy that strips /api still
+#    works. In single-container mode the root is reserved for the SPA, so we skip the root
+#    mount (avoids /accuracy, /data, … API routes shadowing the web pages of the same name).
 for r in all_routers():
-    app.include_router(r)
     app.include_router(r, prefix="/api")
+    if not SERVE_SPA:
+        app.include_router(r)
 
 # Warm the Overview snapshot cache in a SINGLE background thread at startup. This computes
 # the whole page payload once (and primes the Fabric ODBC connection in that same thread) so
@@ -112,3 +122,19 @@ def _warm_overview():
 from services.scheduler import start as _sched_start, stop as _sched_stop
 app.on_event("startup")(_sched_start)
 app.on_event("shutdown")(_sched_stop)
+
+
+# ── single-container: serve the built SPA at / (must be LAST — catches all non-API paths) ──
+if SERVE_SPA:
+    class _SPAStatic(StaticFiles):
+        """Serve static assets; fall back to index.html for client-side routes (SPA)."""
+        async def get_response(self, path, scope):
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                if exc.status_code == 404:
+                    return await super().get_response("index.html", scope)
+                raise
+
+    app.mount("/", _SPAStatic(directory=str(WEB_DIST), html=True), name="spa")
+    log.info("serving bundled SPA from %s (single-container mode)", WEB_DIST)

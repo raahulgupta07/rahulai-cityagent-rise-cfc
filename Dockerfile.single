@@ -1,0 +1,48 @@
+# City Agent RISE — SINGLE-CONTAINER image (OpenWebUI-style).
+# One process serves the built SvelteKit SPA at / AND the API at /api on one port (8000).
+# No separate web container, no reverse proxy, no /api-strip config.
+#
+#   docker compose -f docker-compose.single.yml --env-file .env.prod up -d --build
+#
+# Build context = repo ROOT.
+
+# ── stage 1: build the SPA (adapter-static) ──
+FROM node:20-alpine AS webbuild
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci || npm install --no-audit --no-fund
+COPY web/ ./
+# default adapter = static (SPA) -> /web/build
+RUN npm run build
+
+# ── stage 2: API + engine + baked SPA ──
+FROM python:3.11-slim-bookworm
+
+# ODBC + MS SQL driver 18 (Fabric reads) + libgomp1 (LightGBM OpenMP)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl gnupg unixodbc unixodbc-dev libgomp1 \
+    && curl -sSL -O https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/api
+COPY api/requirements.txt api/requirements-engine.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-engine.txt
+
+COPY api/ /app/api/
+COPY src/ /app/src/
+COPY fabric_user_connector.py /app/fabric_user_connector.py
+
+# bake the built SPA; WEB_DIST flips main.py into single-container (serve UI at /) mode
+COPY --from=webbuild /web/build /app/web_build
+ENV WEB_DIST=/app/web_build
+ENV PYTHONPATH=/app/api
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+CMD ["gunicorn", "main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "1", "--bind", "0.0.0.0:8000", \
+     "--timeout", "600", "--access-logfile", "-"]

@@ -1,0 +1,23 @@
+# Ignore file specific to Dockerfile.single (single-container build).
+# Unlike the root .dockerignore, this KEEPS web/ (needed to build the SPA) but still
+# drops heavy/irrelevant paths.
+.git
+.gitignore
+data/
+models/
+reports/
+presentations/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+.env.*
+*.xlsx
+*.pptx
+*.pdf
+*.docx
+*.~lock*
+node_modules/
+web/node_modules/
+web/build/
+web/.svelte-kit/

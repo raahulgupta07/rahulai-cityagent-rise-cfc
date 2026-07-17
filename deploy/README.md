@@ -125,10 +125,25 @@ domain + TLS for real use.
 
 ## 6. Run
 
+Pick a front proxy. **Both give 3 containers (front + api + web); always reach the app through
+the front port, never the api port directly.**
+
+**Option A — Caddy (auto-TLS, simplest):**
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 docker compose -f docker-compose.prod.yml logs -f api      # watch startup
 ```
+
+**Option B — Nginx:**
+```bash
+docker compose -f docker-compose.nginx.yml --env-file .env.prod up -d --build
+```
+Nginx (`deploy/nginx.conf`) publishes `HTTP_PORT` and proxies `/api/*`→api (strips `/api`) and
+`/*`→web. Terminate TLS at Nginx yourself (no auto-cert).
+
+> ⚠️ Common mistake: running only api+web (no front) and hitting the api port (e.g. `:8001`) →
+> `{"detail":"Not Found"}` — the api has **no `/` page**. Front it with Caddy **or** Nginx and open
+> the **front** port (`HTTP_PORT`).
 
 On first boot the API **background-builds the Overview snapshot** (`data/cache/overview.json`)
 from Fabric + local files, so the dashboard loads instantly. It does **not** train or extract —

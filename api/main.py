@@ -106,16 +106,33 @@ for r in all_routers():
     if not SERVE_SPA:
         app.include_router(r)
 
-# Warm the Overview snapshot cache in a SINGLE background thread at startup. This computes
-# the whole page payload once (and primes the Fabric ODBC connection in that same thread) so
-# the first user load is instant. One thread only — concurrent pyodbc access → SIGSEGV.
+# ONE startup background thread (pyodbc is not thread-safe → never run Fabric concurrently):
+#   1. hydrate local serving parquet from Fabric (so a fresh server needs no shipped data)
+#   2. rebuild the DuckDB views now that the parquet exists
+#   3. warm the Overview snapshot cache
 @app.on_event("startup")
-def _warm_overview():
-    try:
-        from routes import overview
-        overview.warm_on_start()
-    except Exception:
-        pass
+def _boot_background():
+    import threading
+
+    def _work():
+        try:
+            from deps.hydrate import hydrate_from_fabric
+            hydrate_from_fabric()
+        except Exception:
+            log.warning("startup hydrate skipped", exc_info=False)
+        try:
+            from deps import duck, order_views
+            duck._con = None            # force DuckDB views to be rebuilt with the new parquet
+            order_views._registered = False
+        except Exception:
+            pass
+        try:
+            from routes import overview
+            overview._compute_and_cache()
+        except Exception:
+            pass
+
+    threading.Thread(target=_work, daemon=True).start()
 
 
 # scheduler (jobs default-disabled; see services/scheduler.py)

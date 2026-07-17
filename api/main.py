@@ -71,6 +71,29 @@ app.add_middleware(
 )
 
 
+# ── gzip (BIG win for remote users: JSON + JS bundle compress ~70-85%) ───────
+# MUST NOT compress SSE: EventSource needs each event flushed as-is — gzip
+# buffering breaks/starves the live streams (pipeline log, experiment run).
+from starlette.middleware.gzip import GZipMiddleware
+
+
+class _GZipNoSSE(GZipMiddleware):
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            accept = ""
+            for k, v in scope.get("headers", []):
+                if k == b"accept":
+                    accept = v.decode("latin-1")
+                    break
+            if "text/event-stream" in accept:
+                await self.app(scope, receive, send)   # bypass gzip for SSE
+                return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(_GZipNoSSE, minimum_size=1024)
+
+
 # ── global error handler (no stack leak to clients) ─────────────────────────
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
@@ -159,11 +182,20 @@ if SERVE_SPA:
         """
         async def get_response(self, path, scope):
             try:
-                return await super().get_response(path, scope)
+                resp = await super().get_response(path, scope)
             except StarletteHTTPException as exc:
                 if exc.status_code == 404 and not (path == "api" or path.startswith("api/")):
-                    return await super().get_response("index.html", scope)
+                    resp = await super().get_response("index.html", scope)
+                    resp.headers["Cache-Control"] = "no-cache"   # shell must revalidate on deploy
+                    return resp
                 raise
+            # SvelteKit emits content-hashed files under _app/immutable/ — safe to cache
+            # forever; repeat visits skip re-downloading the whole JS/CSS bundle.
+            if path.startswith("_app/immutable/"):
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif path in ("index.html", "") or path.endswith(".html"):
+                resp.headers["Cache-Control"] = "no-cache"
+            return resp
 
     app.mount("/", _SPAStatic(directory=str(WEB_DIST), html=True), name="spa")
     log.info("serving bundled SPA from %s (single-container mode)", WEB_DIST)

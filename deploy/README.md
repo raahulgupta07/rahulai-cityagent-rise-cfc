@@ -125,8 +125,17 @@ domain + TLS for real use.
 
 ## 6. Run
 
-Pick a front proxy. **Both give 3 containers (front + api + web); always reach the app through
-the front port, never the api port directly.**
+**Easiest — one command (recommended, no hand-editing):**
+```bash
+bash deploy/up.sh          # Nginx front (default)
+bash deploy/up.sh caddy    # Caddy front (auto-TLS)
+```
+It stops any old stack, builds, starts the full stack (front + api + web), and prints the URL.
+
+---
+
+Or run compose directly. Pick a front proxy. **Both give 3 containers (front + api + web); always
+reach the app through the front port, never the api port directly.**
 
 **Option A — Caddy (auto-TLS, simplest):**
 ```bash

@@ -1,0 +1,24 @@
+# CFC Forecaster — Caddy reverse proxy
+#
+# {$DOMAIN} = 'localhost' → HTTP only (dev/self-host); a real domain → auto-HTTPS.
+# handle_path strips the /api prefix, so client calls to /api/order reach the API at /order
+# (mirrors the dev vite proxy rewrite). flush_interval -1 keeps SSE streams unbuffered.
+
+{$DOMAIN} {
+	encode gzip
+
+	# API — strip /api, stream SSE unbuffered, longer timeout for heavy runs
+	handle_path /api/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+			transport http {
+				response_header_timeout 600s
+			}
+		}
+	}
+
+	# everything else → SvelteKit adapter-node
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CFC Bakery Demand Forecasting — Plan</title>
+<style>
+  :root{
+    --ink:#1c1a17; --muted:#6b6258; --paper:#faf7f2; --card:#ffffff;
+    --accent:#c8531b; --accent2:#e8a13c; --line:#e7ded2; --good:#2f7d52; --blue:#2b5d8a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--paper);line-height:1.45}
+  .slide{min-height:100vh;width:100%;display:flex;flex-direction:column;justify-content:center;
+         padding:6.5vh 8vw;scroll-snap-align:start;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+  .tag{display:inline-block;font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;
+       color:var(--accent);font-weight:700;margin-bottom:1rem}
+  h1{font-size:3.4rem;line-height:1.05;letter-spacing:-.02em;margin-bottom:1rem}
+  h2{font-size:2.3rem;line-height:1.1;letter-spacing:-.015em;margin-bottom:1.3rem}
+  .sub{font-size:1.2rem;color:var(--muted);max-width:48ch}
+  .grid{display:grid;gap:1rem;margin-top:.5rem}
+  .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.25rem 1.35rem;
+        box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .card .k{font-size:2rem;font-weight:800;color:var(--accent);line-height:1}
+  .card .l{font-size:.9rem;color:var(--muted);margin-top:.35rem}
+  .card h3{font-size:1.1rem;margin-bottom:.45rem;display:flex;align-items:center;gap:.5rem}
+  .card p{font-size:.98rem;color:var(--muted)}
+  ul{list-style:none} li{font-size:1.1rem;padding:.5rem 0;padding-left:1.7rem;position:relative;border-bottom:1px dashed var(--line)}
+  li:before{content:"";position:absolute;left:0;top:1rem;width:9px;height:9px;border-radius:50%;
+            background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  li b{color:var(--ink)}
+  .flow{display:flex;align-items:stretch;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+  .step{flex:1;min-width:120px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:.9rem;text-align:center}
+  .step .n{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em}
+  .step .t{font-size:1rem;font-weight:600;margin-top:.3rem}
+  .step .d{font-size:.8rem;color:var(--muted);margin-top:.25rem}
+  .arrow{align-self:center;color:var(--accent2);font-size:1.3rem;font-weight:700}
+  .pill{display:inline-block;background:rgba(200,83,27,.08);color:var(--accent);
+        border:1px solid rgba(200,83,27,.2);border-radius:999px;padding:.28rem .75rem;font-size:.82rem;font-weight:600;margin:.2rem .3rem .2rem 0}
+  .foot{position:absolute;bottom:2.2vh;left:8vw;right:8vw;display:flex;justify-content:space-between;
+        font-size:.78rem;color:var(--muted);border-top:1px solid var(--line);padding-top:.7rem}
+  .hero{background:linear-gradient(150deg,#1c1a17,#3a2a1e 60%,#5a2f15);color:#fff}
+  .hero h1{color:#fff} .hero .sub{color:#e9ddcf} .hero .tag{color:var(--accent2)}
+  .hero .foot{color:#caa;border-top-color:rgba(255,255,255,.15)}
+  .big{font-size:1.45rem;color:var(--good);font-weight:700;margin-top:1rem}
+  /* bar chart */
+  .bars{display:flex;align-items:flex-end;gap:1.4rem;height:200px;margin-top:1rem;padding:0 1rem}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .bar .col{width:64%;border-radius:8px 8px 0 0;background:linear-gradient(180deg,var(--accent2),var(--accent))}
+  .bar .v{font-size:.82rem;font-weight:700;color:var(--ink);margin-bottom:.35rem}
+  .bar .x{font-size:.85rem;color:var(--muted);margin-top:.5rem}
+  .loop{display:flex;align-items:center;justify-content:center;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+  .node{background:var(--card);border:1px solid var(--line);border-radius:50px;padding:.7rem 1.1rem;font-weight:600;font-size:.95rem}
+  .node small{display:block;font-weight:400;color:var(--muted);font-size:.78rem}
+  .cyc{color:var(--good);font-size:1.3rem;font-weight:700}
+  @page{size:1280px 720px;margin:0}
+  @media print{
+    html{scroll-snap-type:none}
+    .slide{min-height:0;height:720px;width:1280px;page-break-after:always;border:none;padding:54px 72px}
+    .foot{bottom:26px;left:72px;right:72px}
+  }
+  @media(max-width:720px){.g2,.g3,.g4{grid-template-columns:1fr}h1{font-size:2.3rem}h2{font-size:1.7rem}}
+</style>
+</head>
+<body>
+
+<!-- 1 TITLE -->
+<section class="slide hero">
+  <div class="tag">CityAI · Demand Intelligence</div>
+  <h1>Bakery Demand<br>Forecasting</h1>
+  <p class="sub">Predict daily demand for every product at every outlet — and turn it into smarter warehouse orders that cut both stockouts and waste. A system that keeps learning.</p>
+  <div style="margin-top:1.5rem">
+    <span class="pill">98 outlets</span>
+    <span class="pill">3,790 products</span>
+    <span class="pill">4 years of data</span>
+    <span class="pill">Self-learning</span>
+  </div>
+  <div class="foot"><span>CFC Bakery · Seasons &amp; Gong Cha</span><span>Plan v2 · 2026-06-24</span></div>
+</section>
+
+<!-- 2 THE PROBLEM -->
+<section class="slide">
+  <div class="tag">The Project</div>
+  <h2>Bakery is perishable — every order is a bet</h2>
+  <div class="grid g2">
+    <div class="card"><h3>😟 Order too little</h3><p>Empty shelves by noon. Lost sales, unhappy customers, wasted footfall and marketing spend.</p></div>
+    <div class="card"><h3>🗑️ Order too much</h3><p>Unsold buns thrown out at close. Direct money in the bin — every single day, across 98 outlets.</p></div>
+  </div>
+  <ul style="margin-top:1.2rem">
+    <li><b>Today:</b> outlets order daily stock from the warehouse on gut feel + last week's numbers.</li>
+    <li><b>Goal:</b> forecast demand per product per outlet, then recommend the right order quantity automatically.</li>
+    <li><b>Why now:</b> 4 years of clean daily sales data + the external signals are already in place.</li>
+  </ul>
+  <div class="foot"><span>The Project</span><span>2 / 14</span></div>
+</section>
+
+<!-- 3 DATA WE HAVE -->
+<section class="slide">
+  <div class="tag">What We Have</div>
+  <h2>The data is already in place</h2>
+  <div class="grid g4">
+    <div class="card"><div class="k">13.4M</div><div class="l">daily sales records<br>(day × outlet × product)</div></div>
+    <div class="card"><div class="k">4 yrs</div><div class="l">history<br>2022 → 2026</div></div>
+    <div class="card"><div class="k">98</div><div class="l">bakery outlets</div></div>
+    <div class="card"><div class="k">3,790</div><div class="l">active products</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:1rem">
+    <div class="card"><h3>🏬 Core sales — Microsoft Fabric</h3><p>Units sold, revenue, discounts, refunds & voids per product / outlet / day. Plus product, branch &amp; warehouse master data with replenishment routes.</p></div>
+    <div class="card"><h3>➕ Signals we already built</h3><p><b>Weather</b> — 3 yrs rain/temp, 6 cities (6,576 rows). <b>Festivals &amp; holidays</b> — Thingyan, Thadingyut… (122 dated events). <b>Promotions</b> — 124 campaigns.</p></div>
+  </div>
+  <div class="foot"><span>What We Have</span><span>3 / 14</span></div>
+</section>
+
+<!-- 4 DATA INSIGHTS (real numbers) -->
+<section class="slide">
+  <div class="tag">What The Data Already Tells Us</div>
+  <h2>Strong growth, clear patterns</h2>
+  <div class="grid g2" style="align-items:center">
+    <div>
+      <div class="bars">
+        <div class="bar"><div class="v">269M</div><div class="col" style="height:43%"></div><div class="x">2023</div></div>
+        <div class="bar"><div class="v">463M</div><div class="col" style="height:74%"></div><div class="x">2024</div></div>
+        <div class="bar"><div class="v">627M</div><div class="col" style="height:100%"></div><div class="x">2025</div></div>
+        <div class="bar"><div class="v">378M</div><div class="col" style="height:60%"></div><div class="x">2026*</div></div>
+      </div>
+      <p style="font-size:.82rem;color:var(--muted);text-align:center;margin-top:.6rem">Loyalty spend, Ks · *2026 = to June only</p>
+    </div>
+    <ul>
+      <li><b>+133% growth</b> in loyalty spend 2023→2025; 2026 on track to beat it.</li>
+      <li><b>Tuesday peaks</b>, Monday weakest — strong day-of-week rhythm to exploit.</li>
+      <li><b>Outlet concentration:</b> Golden Valley, Myay Ni Gone, Pyay 6.5mi lead — outlets are not interchangeable.</li>
+      <li><b>Customers grew</b> 122k → 169k active loyalty members.</li>
+    </ul>
+  </div>
+  <div class="foot"><span>Data Insights</span><span>4 / 14</span></div>
+</section>
+
+<!-- 5 WHAT WE'LL DO -->
+<section class="slide">
+  <div class="tag">What We'll Do</div>
+  <h2>From raw sales to a daily order recommendation</h2>
+  <div class="flow">
+    <div class="step"><div class="n">01</div><div class="t">Extract</div><div class="d">4-yr sales panel + masters</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">02</div><div class="t">Enrich</div><div class="d">weather, festivals, promos</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">03</div><div class="t">Forecast</div><div class="d">ML predicts demand per item</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">04</div><div class="t">Order</div><div class="d">convert to optimal qty</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">05</div><div class="t">Deliver</div><div class="d">picklist + dashboard</div></div>
+  </div>
+  <ul style="margin-top:1.3rem">
+    <li><b>Model:</b> gradient-boosting (LightGBM) learns day-of-week, seasonality, weather &amp; promo lift per outlet.</li>
+    <li><b>Not just a number:</b> predicts a safe range, then balances margin vs spoilage to set the order.</li>
+    <li><b>Runs nightly:</b> fresh forecast + recommended order for every outlet, automatically.</li>
+  </ul>
+  <div class="foot"><span>What We'll Do</span><span>5 / 14</span></div>
+</section>
+
+<!-- 6 WHY IT WORKS -->
+<section class="slide">
+  <div class="tag">Why It Will Work</div>
+  <h2>The model sees what drives bakery demand</h2>
+  <div class="grid g3">
+    <div class="card"><h3>📅 Rhythm</h3><p>Weekend &amp; payday spikes, day-of-week patterns learned per outlet.</p></div>
+    <div class="card"><h3>🎉 Festivals</h3><p>Thingyan, Thadingyut, holidays — huge swings, flagged in advance.</p></div>
+    <div class="card"><h3>🌧️ Weather</h3><p>Rain cuts footfall; heat shifts demand. Built into the forecast.</p></div>
+    <div class="card"><h3>🏷️ Promotions</h3><p>Campaign lift modelled so stock matches the push.</p></div>
+    <div class="card"><h3>📈 Momentum</h3><p>Recent trends &amp; rolling averages per product.</p></div>
+    <div class="card"><h3>🏪 Outlet DNA</h3><p>Each branch's size, location &amp; mix treated individually.</p></div>
+  </div>
+  <div class="foot"><span>Why It Will Work</span><span>6 / 14</span></div>
+</section>
+
+<!-- 7 ORDER ENGINE -->
+<section class="slide">
+  <div class="tag">The Order Engine</div>
+  <h2>A forecast is not an order — we optimise the decision</h2>
+  <div class="grid g2">
+    <div class="card"><h3>📊 Forecast a range, not a point</h3><p>The model outputs a safe band (e.g. likely 80, up to 110 on a good day) — not a single fragile number.</p></div>
+    <div class="card"><h3>⚖️ Balance cost of being wrong</h3><p>High-margin, cheap-to-make item → lean to order more. Costly, fast-spoiling item → order tighter. (Newsvendor logic.)</p></div>
+    <div class="card"><h3>🚚 Roll up to the warehouse</h3><p>Per-outlet item orders aggregate into one warehouse picklist + procurement plan, using existing supply routes.</p></div>
+    <div class="card"><h3>📦 Respect real constraints</h3><p>Minimum order qty, case/pack sizes, shelf-life limits all applied automatically.</p></div>
+  </div>
+  <div class="foot"><span>The Order Engine</span><span>7 / 14</span></div>
+</section>
+
+<!-- 8 SELF-LEARNING -->
+<section class="slide">
+  <div class="tag">Self-Learning System</div>
+  <h2>It gets smarter every single day</h2>
+  <p class="sub" style="max-width:60ch">Yesterday's actual sales become today's training data. The model retrains on a schedule, so it adapts to new outlets, new products, changing tastes and seasons — no manual rebuild.</p>
+  <div class="loop">
+    <div class="node">Predict<small>nightly order</small></div><div class="cyc">→</div>
+    <div class="node">Sell<small>real demand</small></div><div class="cyc">→</div>
+    <div class="node">Compare<small>forecast vs actual</small></div><div class="cyc">→</div>
+    <div class="node">Learn<small>retrain weekly</small></div><div class="cyc">↺</div>
+  </div>
+  <ul style="margin-top:1.2rem">
+    <li><b>Daily:</b> fresh actuals pulled in automatically (incremental, lightweight).</li>
+    <li><b>Weekly:</b> full model retrain on the latest window — captures new trends &amp; new SKUs.</li>
+    <li><b>Always-on calibration:</b> the safe-stock band self-adjusts as real waste &amp; stockouts are observed.</li>
+  </ul>
+  <div class="foot"><span>Self-Learning System</span><span>8 / 14</span></div>
+</section>
+
+<!-- 9 DATA DRIFT & MONITORING -->
+<section class="slide">
+  <div class="tag">Staying Accurate Over Time</div>
+  <h2>Data drift detection &amp; guardrails</h2>
+  <p class="sub" style="max-width:60ch">Demand patterns shift — new competitors, price changes, store remodels, economic swings. The system watches itself and flags when reality moves away from what it learned.</p>
+  <div class="grid g3" style="margin-top:.8rem">
+    <div class="card"><h3>🔍 Drift detection</h3><p>Monitors input patterns &amp; accuracy. Alerts when a product/outlet starts behaving differently.</p></div>
+    <div class="card"><h3>📉 Accuracy tracking</h3><p>Forecast-vs-actual error tracked per outlet &amp; product, daily — degradation triggers a retrain.</p></div>
+    <div class="card"><h3>🛟 Safety guardrails</h3><p>Sanity caps, fallback to proven baselines, human review for big swings — never blindly over/under-order.</p></div>
+    <div class="card"><h3>🆕 Cold-start handling</h3><p>New outlet or product with no history → category &amp; region averages until it builds its own pattern.</p></div>
+    <div class="card"><h3>🔔 Alerting</h3><p>Stale data, missing feeds, accuracy drops → flagged to the team automatically.</p></div>
+    <div class="card"><h3>🧪 Champion / challenger</h3><p>New model versions tested against the live one before promotion — only promote if better.</p></div>
+  </div>
+  <div class="foot"><span>Data Drift &amp; Monitoring</span><span>9 / 14</span></div>
+</section>
+
+<!-- 10 ARCHITECTURE -->
+<section class="slide">
+  <div class="tag">How It's Built</div>
+  <h2>Architecture — robust &amp; automated</h2>
+  <div class="flow">
+    <div class="step"><div class="n">SOURCE</div><div class="t">Microsoft Fabric</div><div class="d">sales fact + masters</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">PIPELINE</div><div class="t">Extract &amp; Feature</div><div class="d">aggregate in-DB, enrich local</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">BRAIN</div><div class="t">ML Models</div><div class="d">LightGBM quantile + baselines</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">DECISION</div><div class="t">Order Engine</div><div class="d">newsvendor + constraints</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">OUTPUT</div><div class="t">Dashboard / Fabric</div><div class="d">orders + KPIs</div></div>
+  </div>
+  <div class="grid g3" style="margin-top:1.1rem">
+    <div class="card"><h3>⏱️ Scheduled</h3><p>Nightly predict, weekly retrain — fully automated, no manual steps.</p></div>
+    <div class="card"><h3>📚 Versioned</h3><p>Every model &amp; dataset versioned for traceability and rollback.</p></div>
+    <div class="card"><h3>🔐 Governed</h3><p>Secure access, no PII in models, auditable runs.</p></div>
+  </div>
+  <div class="foot"><span>Architecture</span><span>10 / 14</span></div>
+</section>
+
+<!-- 11 TIMELINE -->
+<section class="slide">
+  <div class="tag">Plan</div>
+  <h2>~2–3 weeks to a working forecaster</h2>
+  <div class="grid g2">
+    <div class="card"><h3>① Data &amp; insight <span style="color:var(--muted);font-weight:400">· ~3 days</span></h3><p>Extract, validate, profile demand. Find high-value products &amp; patterns.</p></div>
+    <div class="card"><h3>② Build &amp; prove <span style="color:var(--muted);font-weight:400">· ~1 week</span></h3><p>Features, baseline, ML model. Backtest on history — prove it beats current ordering.</p></div>
+    <div class="card"><h3>③ Order &amp; automate <span style="color:var(--muted);font-weight:400">· ~3 days</span></h3><p>Forecast → order qty → picklist. Nightly run + weekly self-retrain.</p></div>
+    <div class="card"><h3>④ Dashboard &amp; handoff <span style="color:var(--muted);font-weight:400">· ~2 days</span></h3><p>Forecast vs actual, recommended orders, accuracy &amp; savings KPIs, drift alerts.</p></div>
+  </div>
+  <div class="foot"><span>Plan</span><span>11 / 14</span></div>
+</section>
+
+<!-- 12 OUTCOMES -->
+<section class="slide">
+  <div class="tag">The Outcome</div>
+  <h2>What success looks like</h2>
+  <div class="grid g3">
+    <div class="card"><div class="k">↓ Waste</div><div class="l">Fewer unsold buns binned at close</div></div>
+    <div class="card"><div class="k">↓ Stockouts</div><div class="l">Shelves stay stocked through the day</div></div>
+    <div class="card"><div class="k">₭ Saved</div><div class="l">Measured in money vs today's ordering</div></div>
+  </div>
+  <ul style="margin-top:1.1rem">
+    <li><b>Per-outlet, per-product daily order recommendation</b> — no more guessing.</li>
+    <li><b>Quantified accuracy</b> — beat naive ordering by ≥20% on key products; calibrated safe-stock.</li>
+    <li><b>Warehouse picklist</b> aggregated automatically for procurement.</li>
+    <li><b>A system that improves itself</b> and scales from 98 outlets to the wider network.</li>
+  </ul>
+  <div class="big">Right product · right outlet · right quantity · every day.</div>
+  <div class="foot"><span>The Outcome</span><span>12 / 14</span></div>
+</section>
+
+<!-- 13 RISKS -->
+<section class="slide">
+  <div class="tag">Risks &amp; Mitigations</div>
+  <h2>Known risks — and how we handle them</h2>
+  <div class="grid g2">
+    <div class="card"><h3>Intermittent demand</h3><p>Slow SKUs sell zero most days → specialised method (Croston), not forced into the main model.</p></div>
+    <div class="card"><h3>Shelf-life data missing</h3><p>Derive a proxy from product category now; request a shelf-life master for precision.</p></div>
+    <div class="card"><h3>Promo data is coarse</h3><p>Campaign-level only → used as signals; refine if per-SKU/outlet mapping becomes available.</p></div>
+    <div class="card"><h3>Pattern shocks &amp; drift</h3><p>Festivals, weather, economy → external signals + drift monitoring + human-in-loop guardrails.</p></div>
+  </div>
+  <div class="foot"><span>Risks &amp; Mitigations</span><span>13 / 14</span></div>
+</section>
+
+<!-- 14 NEXT -->
+<section class="slide hero">
+  <div class="tag">Next Step</div>
+  <h1>Let's extract the data</h1>
+  <p class="sub">Phase 1: pull the 4-year demand panel + product, outlet &amp; warehouse master data, validate quality — then start modelling toward a self-learning forecaster.</p>
+  <div style="margin-top:1.4rem">
+    <span class="pill">Data confirmed ✓</span>
+    <span class="pill">Access confirmed ✓</span>
+    <span class="pill">Signals built ✓</span>
+    <span class="pill">Ready to build →</span>
+  </div>
+  <div class="foot"><span>CityAI · CFC Bakery Demand Forecasting</span><span>14 / 14</span></div>
+</section>
+
+</body>
+</html>

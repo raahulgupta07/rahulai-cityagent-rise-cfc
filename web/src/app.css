@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+body { @apply bg-bg text-ink font-sans antialiased; }
+h1,h2,h3 { @apply font-display font-semibold tracking-tight; }
+.mono { @apply font-mono; font-variant-numeric: tabular-nums; }
+
+/* ── interaction & accessibility (applies app-wide) ───────────────────────── */
+button:not(:disabled), a[href], label[for], [role="button"], summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+/* visible keyboard focus everywhere */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid theme(colors.accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+:where(a, button):focus:not(:focus-visible) { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* ── component system — Meridian: dark-navy primary, terracotta accent ─────── */
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg text-sm font-semibold
+         px-3.5 py-2 min-h-[38px] transition-colors duration-150 select-none;
+}
+.btn-primary { @apply btn bg-rail text-white hover:bg-rail2; }
+.btn-teal    { @apply btn text-white bg-accent hover:bg-[#a85a34]; }
+.btn-ghost   { @apply btn bg-surface border border-line text-ink hover:border-muted; }
+.btn-subtle  { @apply btn bg-bg border border-line text-muted hover:text-ink hover:border-muted; }
+.btn-warn    { @apply btn border text-warn; background:rgba(154,116,32,.12); border-color:rgba(154,116,32,.3); }
+.btn:disabled { @apply opacity-50; }
+.btn-sm { @apply px-2.5 py-1.5 min-h-[32px] text-xs; }
+
+.pill { @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold; }
+.pill-accent { @apply pill bg-accent text-white; }
+.pill-ghost  { @apply pill bg-surface border border-line text-muted; }
+
+.card { @apply bg-surface border border-line rounded-xl shadow-soft p-5; }
+.card-link { @apply card transition-colors duration-150 hover:border-accent; }
+.dot { @apply inline-block w-2 h-2 rounded-full bg-accent; }
+
+/* svg icons inherit text color + size sensibly */
+.icon { @apply inline-block align-[-2px] flex-none; width: 1em; height: 1em; stroke: currentColor; fill: none; }

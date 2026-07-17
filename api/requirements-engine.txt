@@ -1,0 +1,8 @@
+# Engine (src/*.py) runtime deps — subprocessed by the API runner for real pipeline stages.
+# Kept separate from the API's own requirements.txt so the web-only path stays lean.
+lightgbm==4.*
+numpy==1.26.*
+pandas==2.1.*
+pyarrow==15.*
+matplotlib==3.8.*
+python-pptx==0.6.*

@@ -1,0 +1,90 @@
+# CFC Forecaster — Production stack (Docker single-host)
+#
+# Usage:
+#   cp .env.example .env.prod && edit real values
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Architecture:
+#   caddy (:80/:443, auto-TLS)  ──/api/*──►  api  (FastAPI, 1 uvicorn worker)
+#                               ──/*───────►  web  (SvelteKit adapter-node :3000)
+#   Operational store = SQLite file on a named volume (no Postgres server).
+#
+# IMPORTANT: api runs ONE worker on purpose. The heavy-run lock and job registry are
+# in-process (deps/jobs.py); multiple workers would break the "one heavy run" guarantee.
+# Scale by running heavy jobs on a schedule, not by adding workers.
+
+services:
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on: [api, web]
+    env_file: .env.prod          # provides DOMAIN for the Caddyfile {$DOMAIN}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: always
+    env_file: .env.prod
+    # SINGLE worker — see note above. Do not raise without a shared (Redis) lock.
+    command: >
+      gunicorn main:app
+        --worker-class uvicorn.workers.UvicornWorker
+        --workers 1
+        --bind 0.0.0.0:8000
+        --timeout 600
+        --access-logfile -
+    working_dir: /app/api
+    # secrets (SECRET_KEY, ALLOWED_ORIGINS, FABRIC_*, OPENROUTER_API_KEY, AUTH_DISABLED,
+    # AGENT_MODEL, APP_ENV) come from .env.prod via env_file above. Fixed values only here:
+    environment:
+      APP_DB_PATH: /app/appstore/app.db
+    volumes:
+      - appstore:/app/appstore   # SQLite operational DB (durable, separate from data/)
+      - ./data:/app/data         # parquet inputs + writable predictions/external
+      - ./reports:/app/reports   # writable report outputs
+      - ./models:/app/models     # model registry + champion pointer (writable)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: always
+    env_file: .env.prod          # provides ORIGIN (adapter-node CSRF: public https URL)
+    environment:
+      PORT: 3000
+    depends_on: [api]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  appstore:
+  caddy_data:
+  caddy_config:
+
+# ── .env.prod required ────────────────────────────────────────────────────────
+# SECRET_KEY         — strong random (python -c "import secrets;print(secrets.token_hex(32))")
+# ALLOWED_ORIGINS    — comma-sep public origins, e.g. https://cfc.cityholdings.com.mm
+# ORIGIN             — public https URL of the web app (adapter-node CSRF)
+# DOMAIN             — domain Caddy serves TLS for (or 'localhost' for no TLS)
+# AUTH_DISABLED      — 0 in production (boot ABORTS if 1)
+# FABRIC_*           — only needed if live sync enabled; rotate FABRIC_PASSWORD
+# OPENROUTER_API_KEY — only needed for LLM narration (Autopilot); app works without it

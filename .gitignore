@@ -1,0 +1,31 @@
+.env
+.env.*
+!.env.example
+data/
+__pycache__/
+*.pyc
+.venv/
+# app build
+node_modules/
+web/build/
+web/.svelte-kit/
+*.duckdb
+*.duckdb.wal
+.~lock.*#
+web/package-lock.json
+.DS_Store
+**/.DS_Store
+
+# ── data / secrets / heavy artifacts — never push (regenerate via src/ or Fabric) ──
+# trained model binaries (~100MB) — rebuild with src/train.py or the Fabric notebook
+models/
+# generated snapshot cache (already under data/, listed for clarity)
+data/cache/
+# generated decks / reports / business data documents
+reports/figs/
+reports/_*/
+presentations/
+*.pdf
+*.pptx
+*.xlsx
+*.docx

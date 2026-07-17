@@ -1,0 +1,21 @@
+# Keep the api build context (repo root) lean — these are volume-mounted or irrelevant.
+.git
+.gitignore
+web/
+data/
+models/
+reports/
+presentations/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+.env.*
+*.xlsx
+*.pptx
+*.pdf
+*.docx
+*.~lock*
+node_modules/
+.svelte-kit/
+build/

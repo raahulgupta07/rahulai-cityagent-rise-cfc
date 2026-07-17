@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CFC Demand Forecasting — Explained Simply</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --ink:#1c2333; --muted:#5b6577;
+    --line:#e6e9f0; --brand:#7c4dff; --brand2:#00b8a9; --good:#1aab6b;
+    --warn:#e8a93a; --bad:#e5564b; --soft:#f0f2f8; --shadow:0 2px 14px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.55;font-size:16px}
+  a{color:var(--brand);text-decoration:none}
+  .wrap{display:flex;max-width:1500px;margin:0 auto}
+  /* sidebar */
+  nav{position:sticky;top:0;align-self:flex-start;width:250px;height:100vh;overflow:auto;
+    padding:24px 16px;border-right:1px solid var(--line);background:#fff}
+  nav h1{font-size:16px;margin:0 0 4px}
+  nav .sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+  nav a{display:block;padding:8px 12px;border-radius:9px;color:var(--ink);font-size:14px;margin:2px 0}
+  nav a:hover{background:var(--soft)}
+  nav a.on{background:var(--brand);color:#fff}
+  nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+    margin:16px 0 4px 12px}
+  main{flex:1;padding:36px 44px;max-width:1180px}
+  section{margin-bottom:54px;scroll-margin-top:20px}
+  h2{font-size:28px;margin:0 0 6px}
+  h2 .em{font-size:22px;margin-right:8px}
+  .lead{color:var(--muted);font-size:17px;margin:0 0 22px;max-width:780px}
+  h3{font-size:18px;margin:26px 0 10px}
+  p{max-width:820px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:22px 24px;box-shadow:var(--shadow);margin:14px 0}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:1050px){.g2,.g3,.g4{grid-template-columns:1fr}nav{display:none}main{padding:24px}}
+  /* KPI */
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
+  .kpi .n{font-size:30px;font-weight:700;letter-spacing:-.5px}
+  .kpi .l{font-size:13px;color:var(--muted);margin-top:2px}
+  .kpi .why{font-size:12.5px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:9px}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px}
+  .p-good{background:#e3f7ed;color:var(--good)} .p-warn{background:#fdf2dd;color:#b9831f}
+  .p-bad{background:#fde7e5;color:var(--bad)} .p-info{background:#ece4ff;color:var(--brand)}
+  /* plain-talk callouts */
+  .talk{border-left:4px solid var(--brand);background:#faf8ff;padding:14px 18px;border-radius:0 12px 12px 0;margin:12px 0}
+  .talk b{color:var(--brand)}
+  .eli5{border-left:4px solid var(--brand2);background:#effbfa;padding:12px 16px;border-radius:0 12px 12px 0;margin:10px 0;font-size:15px}
+  .eli5:before{content:"🧒 In plain words: ";font-weight:700;color:#08766c}
+  /* steps */
+  .steps{counter-reset:s;display:grid;gap:12px}
+  .step{display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid var(--line);
+    border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+  .step .num{counter-increment:s;background:var(--brand);color:#fff;min-width:34px;height:34px;
+    border-radius:10px;display:grid;place-items:center;font-weight:700}
+  .step .num:before{content:counter(s)}
+  .step h4{margin:0 0 3px;font-size:16px}
+  .step p{margin:0;color:var(--muted);font-size:14px}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+  td.r,th.r{text-align:right}
+  tr:hover td{background:var(--soft)}
+  canvas{max-height:330px}
+  .chartbox{position:relative;height:330px}
+  .scorerow{display:flex;justify-content:space-between;align-items:center;gap:16px;
+    padding:16px 0;border-bottom:1px solid var(--line)}
+  .scorerow:last-child{border-bottom:none}
+  .scorerow .v{font-size:24px;font-weight:700;min-width:90px}
+  .scorerow .meta{flex:1}
+  .scorerow .meta .t{font-weight:600}
+  .scorerow .meta .d{font-size:13.5px;color:var(--muted)}
+  .bar{height:8px;background:var(--soft);border-radius:6px;overflow:hidden;min-width:120px;flex:0 0 120px}
+  .bar i{display:block;height:100%;border-radius:6px}
+  .tag{font-size:11px;color:var(--muted)}
+  .foot{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px;margin-top:30px}
+  details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 16px;margin:8px 0;box-shadow:var(--shadow)}
+  summary{cursor:pointer;font-weight:600;padding:8px 0}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:8px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .hero{background:linear-gradient(120deg,#7c4dff,#00b8a9);color:#fff;border-radius:20px;padding:34px 36px;margin-bottom:30px}
+  .hero h2{color:#fff;font-size:32px;margin-bottom:8px}
+  .hero p{color:#eef;max-width:760px;font-size:17px}
+  .hero .row{display:flex;gap:26px;margin-top:20px;flex-wrap:wrap}
+  .hero .row div b{font-size:26px;display:block}
+  .hero .row div span{font-size:13px;opacity:.85}
+  .mer{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);
+    margin:14px 0;overflow:auto;text-align:center}
+  .mer .mermaid{display:inline-block}
+  .capt{font-size:13px;color:var(--muted);margin-top:8px;text-align:center}
+  /* P-quantile explainer */
+  .qrow{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .qrow:last-child{border-bottom:none}
+  .qbadge{min-width:62px;height:62px;border-radius:14px;display:grid;place-items:center;color:#fff;
+    font-weight:700;font-size:18px;flex:0 0 62px}
+  .qtrack{flex:1}
+  .qtrack .t{font-weight:600;margin-bottom:6px}
+  .qtrack .d{font-size:13.5px;color:var(--muted)}
+  .qmeter{height:10px;background:var(--soft);border-radius:6px;margin-top:8px;overflow:hidden;position:relative}
+  .qmeter i{position:absolute;top:0;left:0;height:100%;border-radius:6px;opacity:.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <h1>🥐 CFC Demand AI</h1>
+  <div class="sub">CFC outlets stock-order brain<br>explained for everyone</div>
+  <div class="grp">Start here</div>
+  <a href="#top" class="on">What is this?</a>
+  <a href="#problem">The problem we solve</a>
+  <a href="#built">What we built (the 9 steps)</a>
+  <div class="grp">The data</div>
+  <a href="#data">What data we have</a>
+  <a href="#gaps">Missing / assumed / needed data</a>
+  <div class="grp">The model</div>
+  <a href="#train">How we train it</a>
+  <a href="#scores">Every score explained</a>
+  <a href="#accuracy">How accurate is it?</a>
+  <div class="grp">Using it</div>
+  <a href="#use">How to use it day-to-day</a>
+  <a href="#selflearn">How it self-improves</a>
+  <a href="#gap">The one thing left to do</a>
+</nav>
+
+<main>
+<!-- ================= HERO ================= -->
+<section id="top">
+<div class="hero">
+  <h2>The CFC outlets order-planning brain</h2>
+  <p>This is a computer system that looks at how much each product sold every day across the CFC
+  outlets (Seasons, NBH, Bistro, Gong Cha), then predicts how much each outlet will sell
+  <b>tomorrow</b> — and tells the warehouse exactly how many to make. Goal: never run out, never
+  throw away.</p>
+  <div class="row">
+    <div><b>7.08M</b><span>days of sales learned</span></div>
+    <div><b>84</b><span>CFC outlets</span></div>
+    <div><b>3,580</b><span>products</span></div>
+    <div><b>~16%</b><span>more accurate than old guess</span></div>
+    <div><b>−21%</b><span>lower stockout + waste cost</span></div>
+  </div>
+</div>
+<div class="eli5">It is like a very experienced baker who remembers every single day of sales for 3.5
+years, never forgets, and every night writes down how many of each bun to make tomorrow for every shop.</div>
+</section>
+
+<!-- ================= PROBLEM ================= -->
+<section id="problem">
+<h2><span class="em">🤔</span>The problem we solve</h2>
+<p class="lead">The CFC outlet network has two ways to lose money every single day.</p>
+<div class="grid g2">
+  <div class="card">
+    <span class="pill p-bad">Problem 1 — Stockout</span>
+    <h3>Bake too little → empty shelf</h3>
+    <p>Customer wants a croissant, shelf is empty, customer leaves. Lost sale, unhappy customer.</p>
+  </div>
+  <div class="card">
+    <span class="pill p-warn">Problem 2 — Waste</span>
+    <h3>Bake too much → throw away</h3>
+    <p>Bread not sold by evening goes in the bin. You paid to make it; you get nothing back.</p>
+  </div>
+</div>
+<div class="talk"><b>The hard part:</b> these two pull in opposite directions. Bake more to avoid empty
+shelves → you waste more. Bake less to avoid waste → you run out. The right number is different for
+<b>every product, every shop, every day</b>. A human cannot compute 84 shops × 3,580 products by hand
+each night. The computer can.</div>
+</section>
+
+<!-- ================= BUILT ================= -->
+<section id="built">
+<h2><span class="em">🏗️</span>What we built — the 9 steps</h2>
+<p class="lead">A pipeline = an assembly line. Sales data goes in one end, a daily bake-list comes out
+the other. Every step is finished and working (all 9 phases ✅).</p>
+<div class="steps">
+  <div class="step"><div class="num"></div><div><h4>Get the sales data</h4><p>Pull 3.5 years of "how many sold" from the company database (Microsoft Fabric), per shop, per product, per day.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Clean &amp; understand it</h4><p>Check it's correct, find patterns: which products sell most, weekend vs weekday, festival effects.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Build "clues" (features)</h4><p>For each day we give the model hints: what sold last week, the 28-day average, day-of-week, holidays, weather.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Make a simple guess (baseline)</h4><p>The dumb method ("just repeat last week's average") to measure against. This is the bar to beat.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Train the smart model (LightGBM)</h4><p>A machine-learning model learns the patterns and predicts demand. It beat the simple guess by ~16%.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Test it honestly (backtest)</h4><p>Pretend it's 3 past months, predict, compare to what really happened. No cheating — it never sees the future.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Turn forecast into an order (newsvendor)</h4><p>A forecast isn't an order. We do the maths of "cost of empty shelf vs cost of waste" to pick the smart order quantity.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Run it every night + keep learning</h4><p>Nightly: produce tomorrow's bake-list. Weekly: re-train and only upgrade if the new model is actually better.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>This dashboard + handoff</h4><p>Show all the numbers in plain language so anyone can use it and trust it.</p></div></div>
+</div>
+
+<h3>The whole assembly line, in one picture</h3>
+<div class="mer"><pre class="mermaid">
+flowchart LR
+  A["🗄️ Sales data<br/>(Microsoft Fabric)"] --> B["🧹 Clean &amp;<br/>understand"]
+  B --> C["🧩 Build clues<br/>(features)"]
+  C --> D["🤖 Train model<br/>(LightGBM)"]
+  D --> E["🧪 Honest test<br/>(backtest)"]
+  E --> F["🧮 Decide order<br/>(newsvendor)"]
+  F --> G["📋 Warehouse<br/>bake-list"]
+  G --> H["🏪 84 CFC<br/>outlets"]
+  E -. weather + holidays .-> C
+  H -. tomorrow's real sales .-> A
+  classDef d fill:#7c4dff,stroke:#5a32c9,color:#fff;
+  classDef o fill:#00b8a9,stroke:#089186,color:#fff;
+  class A,B,C,D,E,F d;
+  class G,H o;
+</pre>
+<div class="capt">Data flows left → right. The dotted line back to the start = the loop: today's real
+sales become tomorrow's lesson, so the system keeps learning forever.</div></div>
+</section>
+
+<!-- ================= DATA ================= -->
+<section id="data">
+<h2><span class="em">🗂️</span>What data we have</h2>
+<p class="lead">The model is only as good as what it learned from. Here is exactly what went in.</p>
+<div class="grid g4">
+  <div class="kpi"><div class="n">7.08M</div><div class="l">rows of daily sales</div><div class="why">Every (day × shop × product) that ever sold, Jan 2023 → Jun 2026.</div></div>
+  <div class="kpi"><div class="n">84</div><div class="l">active shops</div><div class="why">Shops that actually had sales (master list says 98 — we use the real 84).</div></div>
+  <div class="kpi"><div class="n">3,580</div><div class="l">products sold</div><div class="why">Out of 29,515 in the catalogue — most are never sold; we model the real ones.</div></div>
+  <div class="kpi"><div class="n">3.5 yrs</div><div class="l">history depth</div><div class="why">Long enough to learn seasons, festivals, weekday rhythms.</div></div>
+</div>
+
+<h3>The four ingredients</h3>
+<div class="grid g2">
+  <div class="card"><span class="pill p-info">Core</span><h3>Sales facts</h3>
+    <p><code>CFC_PBID_Sales_Summary</code>. What we predict = <b>net units</b> = sold − refunded − voided.
+    The honest "really left the shop" number.</p></div>
+  <div class="card"><span class="pill p-info">Reference</span><h3>Master lists</h3>
+    <p>11 tables describing products, shops, warehouses, brands, channels — so "ID 22953" becomes
+    "Golden Chicken Floss".</p></div>
+  <div class="card"><span class="pill p-info">Outside signal</span><h3>Weather</h3>
+    <p>3 years of daily weather for 6 cities. Rain &amp; heat change what people buy.</p></div>
+  <div class="card"><span class="pill p-info">Outside signal</span><h3>Holidays &amp; festivals</h3>
+    <p>Myanmar public holidays + Thingyan. Public holiday <b>+7%</b> sales; Thingyan <b>−8%</b> (shops shut).</p></div>
+</div>
+
+<h3>Sales over time — the heartbeat of the business</h3>
+<div class="card"><div class="chartbox"><canvas id="monthly"></canvas></div>
+  <div class="eli5">Each bar = total units sold across all CFC outlets that month. You can see it grows over the years and
+  wobbles with seasons. This whole shape is what the model learned to predict.</div></div>
+
+<h3>A few facts worth knowing</h3>
+<div class="grid g3">
+  <div class="kpi"><div class="n">85.5%</div><div class="l">volume is "Seasons" brand</div><div class="why">Plus NBH, Bistro, Gong Cha. Seasons is the giant.</div></div>
+  <div class="kpi"><div class="n">99 SKUs</div><div class="l">drive 80% of all sales</div><div class="why">"Class A" — only 3% of products. We make these the most accurate.</div></div>
+  <div class="kpi"><div class="n">53%</div><div class="l">of products sell rarely</div><div class="why">"Intermittent" — sell once in a while. Hard to predict; small volume.</div></div>
+</div>
+</section>
+
+<!-- ================= GAPS ================= -->
+<section id="gaps">
+<h2><span class="em">🧩</span>Missing, assumed &amp; needed data</h2>
+<p class="lead">Being honest about what we <i>don't</i> have is what makes the rest trustworthy.</p>
+<div class="grid g3">
+  <div class="card"><span class="pill p-bad">Missing today</span>
+    <ul>
+      <li><b>Real profit per product.</b> We don't have true margin/cost per item yet.</li>
+      <li><b>Real shelf-life.</b> Which items spoil same-day vs last weeks.</li>
+      <li><b>Weather before Jun 2023</b> (9% of rows have a blank weather value — model handles it fine).</li>
+      <li><b>Some shop→region links</b> (14% blank, filled by branch code).</li>
+    </ul></div>
+  <div class="card"><span class="pill p-warn">We assumed (placeholder)</span>
+    <ul>
+      <li><b>35% gross margin</b> for every product (same for all).</li>
+      <li><b>1-day shelf life</b> for everything (spoils same day).</li>
+      <li><b>No salvage</b> — unsold = total loss.</li>
+    </ul>
+    <p class="tag">These are demo numbers so the system runs end-to-end. They are deliberately conservative.</p></div>
+  <div class="card"><span class="pill p-good">What we need next</span>
+    <ul>
+      <li><b>Finance:</b> real gross margin per product (or per category).</li>
+      <li><b>Operations:</b> real shelf-life days per product.</li>
+      <li><b>Operations:</b> what % of cost you recover on unsold items.</li>
+    </ul>
+    <p class="tag">Drop these into one small file and the order quantities get smarter — no new code.</p></div>
+</div>
+<div class="talk"><b>Why this matters:</b> the forecast (how much will sell) is already strong. The
+<b>order</b> (how much to bake) currently treats every product the same because we lack real economics.
+A croissant (spoils fast, thin margin) and a frozen cake (lasts weeks) should be ordered differently.
+Give us the 3 numbers above and the system does that automatically.</div>
+</section>
+
+<!-- ================= TRAIN ================= -->
+<section id="train">
+<h2><span class="em">🎓</span>How we train it</h2>
+<p class="lead">Two brains working together: one predicts demand, one decides the order.</p>
+
+<div class="card">
+  <h3>Brain 1 — the forecaster (LightGBM)</h3>
+  <p>LightGBM is a "gradient-boosted trees" model. Think of it as <b>thousands of yes/no questions</b>
+  stacked up: <i>Is it a weekend? Did it sell a lot last week? Is it a holiday? Is it raining?</i> Each
+  question refines the guess. It learned these questions automatically from 8.3 million examples.</p>
+  <div class="eli5">It's 20 questions, but with thousands of questions and millions of past examples, so the
+  final guess is very well-informed.</div>
+  <p>Important: it doesn't give one number. It gives a <b>range</b> — a "most-likely" (P50), a "safe"
+  (P85) and a "very safe" (P95) level. That range is what lets us choose how cautious to be.</p>
+
+  <h3 style="margin-top:8px">What do P50, P85, P95 mean? (all three, one place)</h3>
+  <p>"P" = percentile = a confidence level. Think of it as a <b>safety dial</b> you turn up or down.</p>
+  <div class="qrow">
+    <div class="qbadge" style="background:#7c4dff">P50</div>
+    <div class="qtrack"><div class="t">Most-likely — the honest middle guess</div>
+      <div class="d">Demand lands below this about <b>half</b> the time, above it the other half. Best for the
+      cost-cheapest order. Use for thin-margin / spoils-fast items.</div>
+      <div class="qmeter"><i style="width:50%;background:#7c4dff"></i></div></div></div>
+  <div class="qrow">
+    <div class="qbadge" style="background:#5aa9ff">P85</div>
+    <div class="qtrack"><div class="t">Safe — covers a busy day</div>
+      <div class="d">Demand stays below this <b>85%</b> of days. Order to here and you'll rarely run out.
+      A bit of waste on quiet days is the price. Good for important / steady sellers.</div>
+      <div class="qmeter"><i style="width:85%;background:#5aa9ff"></i></div></div></div>
+  <div class="qrow">
+    <div class="qbadge" style="background:#00b8a9">P95</div>
+    <div class="qtrack"><div class="t">Very safe — almost never empty</div>
+      <div class="d">Covers <b>95%</b> of days, even big spikes. Almost zero stockouts, but the most waste.
+      Use only for must-never-miss items (and long shelf-life).</div>
+      <div class="qmeter"><i style="width:95%;background:#00b8a9"></i></div></div></div>
+  <div class="eli5">Same forecast, three caution levels. Turn the dial UP (P95) to avoid empty shelves;
+  turn it DOWN (P50) to avoid waste. The newsvendor brain picks the right dial setting per product
+  automatically — once it knows each product's real margin and shelf-life.</div>
+</div>
+
+<div class="card">
+  <h3>Brain 2 — the order-decider (Newsvendor)</h3>
+  <p>A 100-year-old formula from running a newspaper stand: every morning decide how many papers to
+  stock. Too few = miss sales; too many = waste. It balances:</p>
+  <table>
+    <tr><th>Cost of being SHORT (Cu)</th><td>the profit you lose when the shelf is empty</td></tr>
+    <tr><th>Cost of being OVER (Co)</th><td>the money you lose throwing unsold items away</td></tr>
+  </table>
+  <p style="margin-top:14px">It computes a "critical ratio" = Cu ÷ (Cu + Co). High-margin, long-life
+  items → order generously. Thin-margin, spoils-fast items → order lean. <b>This is exactly where the
+  real economics data plugs in.</b></p>
+  <div class="eli5">If a product's profit is big and it doesn't spoil, make extra to be safe. If profit is
+  small and it spoils tonight, make just enough. The formula does this product by product.</div>
+  <div class="mer"><pre class="mermaid">
+flowchart TD
+  S["Forecast says: outlet will<br/>sell about N tomorrow"] --> Q{"What kind of<br/>product is it?"}
+  Q -->|"High profit +<br/>lasts long"| H["Order ABOVE N<br/>(safety stock)<br/>→ never miss a sale"]
+  Q -->|"Thin profit +<br/>spoils today"| L["Order AT / BELOW N<br/>(stay lean)<br/>→ avoid waste"]
+  H --> R["📋 Final order qty"]
+  L --> R
+  classDef a fill:#7c4dff,stroke:#5a32c9,color:#fff;
+  classDef g fill:#1aab6b,stroke:#138a55,color:#fff;
+  classDef w fill:#e8a93a,stroke:#c2861f,color:#fff;
+  class S,Q,R a; class H g; class L w;
+</pre>
+  <div class="capt">The decision the newsvendor brain makes for every product, every outlet, every day.
+  Right now it lacks the real "what kind of product" info — see the last section.</div></div>
+</div>
+
+<div class="card">
+  <h3>The golden rule we never broke: no cheating</h3>
+  <p>When training and testing, the model is <b>never allowed to see the future</b>. To predict a day,
+  it only uses data from <i>before</i> that day. That's why the test scores below are honest — they
+  mirror real life, where tomorrow is genuinely unknown.</p>
+</div>
+</section>
+
+<!-- ================= SCORES ================= -->
+<section id="scores">
+<h2><span class="em">📊</span>Every score, explained</h2>
+<p class="lead">Here is each number the model produced, what it means in human words, and whether it's
+good. <b>Lower error = better; coverage should match its target.</b></p>
+
+<div class="card">
+  <div class="scorerow">
+    <div class="v" style="color:var(--good)">0.341</div>
+    <div class="meta"><div class="t">WMAPE — the headline accuracy <span class="pill p-good">good</span></div>
+      <div class="d">"On average, our prediction is off by about 34% of the volume." Sounds high, but outlet
+      demand is very spiky (a shop might sell 3 one day, 9 the next). The simple guess was 40.5% off —
+      we cut a big chunk of that error. Lower is better.</div></div>
+    <div class="bar"><i style="width:66%;background:var(--good)"></i></div>
+  </div>
+  <div class="scorerow">
+    <div class="v">+16%</div>
+    <div class="meta"><div class="t">Improvement vs the simple guess <span class="pill p-good">good</span></div>
+      <div class="d">We beat the "just repeat last week" baseline by 16%, and we beat it in <b>every</b>
+      test month and <b>every</b> product class — not a lucky streak.</div></div>
+    <div class="bar"><i style="width:80%;background:var(--good)"></i></div>
+  </div>
+  <div class="scorerow">
+    <div class="v">0.811</div>
+    <div class="meta"><div class="t">R² — how much of the ups-and-downs we explain <span class="pill p-good">good</span></div>
+      <div class="d">81% of the real movement in demand is captured by the model. Closer to 1.0 (100%) is
+      better; 0.81 is strong for daily retail data.</div></div>
+    <div class="bar"><i style="width:81%;background:var(--good)"></i></div>
+  </div>
+  <div class="scorerow">
+    <div class="v">−0.41</div>
+    <div class="meta"><div class="t">Bias — does it lean high or low? <span class="pill p-good">good</span></div>
+      <div class="d">On average it predicts just 0.41 units <i>below</i> reality — almost perfectly
+      centred. A big bias would mean it systematically over- or under-bakes. This is tiny.</div></div>
+    <div class="bar"><i style="width:88%;background:var(--good)"></i></div>
+  </div>
+  <div class="scorerow">
+    <div class="v">2.29</div>
+    <div class="meta"><div class="t">MAE — typical miss in actual units</div>
+      <div class="d">A typical prediction is about 2.3 units away from the truth. For items selling a few
+      to a few thousand a day, that's small in absolute terms.</div></div>
+    <div class="bar"><i style="width:70%;background:var(--brand)"></i></div>
+  </div>
+</div>
+
+<h3>The "range" scores — are P85/P95 trustworthy?</h3>
+<p>The model says "I'm 85% sure demand won't exceed X." We check: when it claimed 85%, was it right 85%
+of the time? This is called <b>calibration</b>, and ours is excellent — the promise matches reality.</p>
+<div class="grid g3">
+  <div class="kpi"><div class="n">85.4%<span style="font-size:14px;color:var(--muted)"> / 85%</span></div><div class="l">P85 coverage vs target</div><div class="why">It promised 85, delivered 85.4. Almost perfect → safe to trust for safety-stock.</div></div>
+  <div class="kpi"><div class="n">94.5%<span style="font-size:14px;color:var(--muted)"> / 95%</span></div><div class="l">P95 coverage vs target</div><div class="why">Promised 95, delivered 94.5. Spot on.</div></div>
+  <div class="kpi"><div class="n">56.7%<span style="font-size:14px;color:var(--muted)"> / 50%</span></div><div class="l">P50 coverage vs target</div><div class="why">Slightly over 50% — the model is a touch cautious at the middle. Harmless.</div></div>
+</div>
+
+<h3>Accuracy by product importance (ABC)</h3>
+<p>We split products into A (best-sellers), B (medium), C (rare). We deliberately made A the most
+accurate, because A is 75–80% of all volume and money.</p>
+<div class="card"><div class="chartbox"><canvas id="abc"></canvas></div>
+  <div class="legend"><span><i class="dot" style="background:var(--brand)"></i>Our model (lower=better)</span>
+    <span><i class="dot" style="background:#cdd3e0"></i>Simple guess</span></div>
+  <div class="eli5">Class A items (the ones that matter most) are predicted best, at 29% error vs 35% for
+  the old way. Rare Class C items are harder — but they're tiny volume, so it barely matters.</div></div>
+</section>
+
+<!-- ================= ACCURACY ================= -->
+<section id="accuracy">
+<h2><span class="em">🎯</span>How accurate is it, really?</h2>
+<p class="lead">The clearest proof: predicted vs what actually happened, across 3 real months it had
+never seen during training.</p>
+
+<div class="card"><div class="chartbox"><canvas id="fva"></canvas></div>
+  <div class="legend">
+    <span><i class="dot" style="background:#1c2333"></i>What actually sold</span>
+    <span><i class="dot" style="background:var(--brand)"></i>Our prediction (most-likely)</span>
+    <span><i class="dot" style="background:#c9b8ff"></i>Safe upper level (P85)</span></div>
+  <div class="eli5">The dark line (reality) and purple line (our guess) track each other closely — the model
+  catches the weekly rhythm and the spikes. The faint band on top is the "play it safe" level used to
+  avoid stockouts.</div></div>
+
+<h3>The business result that matters</h3>
+<div class="grid g4">
+  <div class="kpi"><div class="n" style="color:var(--good)">−21%</div><div class="l">total cost (stockout + waste)</div><div class="why">₭2.94B with our model vs ₭3.71B with the old method, over 608k order-days tested.</div></div>
+  <div class="kpi"><div class="n">14.8%</div><div class="l">waste rate</div><div class="why">Down from 20.8% on the old method — less thrown in the bin.</div></div>
+  <div class="kpi"><div class="n">0.319</div><div class="l">live model error (champion)</div><div class="why">The model running in production is even better than the test average. Beat the stretch goal.</div></div>
+  <div class="kpi"><div class="n">~30k</div><div class="l">units/day on the bake-list</div><div class="why">Across ~230 products — a full warehouse make-list, ready every morning.</div></div>
+</div>
+
+<h3>Top sellers — what they actually sold vs how accurately we predict them</h3>
+<p>Two things per product: the <b>grey bar</b> = how many units it really sold over the test window
+(actual demand), the <b>green bar</b> = how accurate our forecast was on it. Tall + green = a big seller
+we nail. That's where the money is.</p>
+<div class="card"><div class="chartbox" style="height:420px"><canvas id="sku"></canvas></div>
+  <div class="legend">
+    <span><i class="dot" style="background:#cdd3e0"></i>Actually sold (units)</span>
+    <span><i class="dot" style="background:var(--brand2)"></i>Forecast accuracy (%)</span></div>
+  <div class="eli5">Our top-sellers are also our best forecasts — Golden Chicken Floss sold 302k units and
+  we predict it <b>84% accurately</b> (only 16% off). These steady, popular items are exactly where good
+  forecasting saves the most money.</div></div>
+
+<details>
+  <summary>Be honest — what is the model bad at?</summary>
+  <p>Rare, lumpy items (a product that sells 0, 0, 0, then 12) are genuinely hard for any model —
+  there's little pattern to learn. These are Class C: ~5% of volume. Plan: add a specialist method
+  (Croston/SBA) just for them. They don't hurt the money much, so it's on the backlog, not urgent.</p>
+</details>
+</section>
+
+<!-- ================= USE ================= -->
+<section id="use">
+<h2><span class="em">🛠️</span>How to use it, day to day</h2>
+<p class="lead">You don't need to understand any of the maths to run it. Three routines.</p>
+<div class="grid g3">
+  <div class="card"><span class="pill p-info">Every night</span><h3>Get tomorrow's bake-list</h3>
+    <p>The system produces a warehouse make-list: for every product, how many units to bake and which
+    outlets they go to, with the ₭ value. Hand it to the warehouse/production team.</p>
+    <code>pipeline predict → order picklist</code></div>
+  <div class="card"><span class="pill p-info">Every week</span><h3>Let it re-learn</h3>
+    <p>It re-trains on the latest week and only swaps in the new model <b>if it's actually better</b>.
+    A worse model can never go live — fully safe.</p>
+    <code>pipeline retrain</code></div>
+  <div class="card"><span class="pill p-info">Anytime</span><h3>Health check</h3>
+    <p>Ask "is the world drifting away from what I learned?" It checks weather/behaviour shifts and tells
+    you if a re-train is worth it.</p>
+    <code>pipeline monitor</code></div>
+</div>
+<div class="talk"><b>When should I re-train?</b> Only when accuracy actually drops (recent error climbs more
+than 10%). Weather drifting in monsoon season is normal and expected — that alone is <b>not</b> a reason
+to panic. The system tells you the difference.</div>
+</section>
+
+<!-- ================= SELF-LEARN ================= -->
+<section id="selflearn">
+<h2><span class="em">♻️</span>How it improves itself</h2>
+<p class="lead">It's not a one-time build. It's a loop that keeps getting better and guards itself
+against getting worse.</p>
+<div class="steps">
+  <div class="step"><div class="num"></div><div><h4>Champion is the model on duty</h4><p>One trusted model makes today's real bake-lists.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Challenger trains in the shadows</h4><p>Each week a fresh model trains on the newest data, off to the side.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>They compete fairly</h4><p>Both are scored on the same recent days. The challenger must win by at least 1% to earn promotion.</p></div></div>
+  <div class="step"><div class="num"></div><div><h4>Only the better one is promoted</h4><p>If the challenger wins, it becomes the new champion. If not, the old one stays. <b>You can never get worse.</b></p></div></div>
+  <div class="step"><div class="num"></div><div><h4>A drift-watcher stands guard</h4><p>It watches for the world changing (new weather, new behaviour) and flags when a re-train is genuinely worth it.</p></div></div>
+</div>
+<div class="mer"><pre class="mermaid">
+flowchart LR
+  CH["👑 Champion<br/>(on duty today)"] --> P["📋 Makes real<br/>bake-lists"]
+  NEW["🆕 New week<br/>of sales"] --> TR["🎓 Train<br/>Challenger"]
+  TR --> CMP{"Challenger beats<br/>Champion by ≥1%?"}
+  CMP -->|"Yes ✅"| PROMO["⬆️ Promote:<br/>Challenger becomes<br/>new Champion"]
+  CMP -->|"No ❌"| KEEP["🔒 Keep old<br/>Champion"]
+  PROMO --> CH
+  KEEP --> CH
+  classDef c fill:#7c4dff,stroke:#5a32c9,color:#fff;
+  classDef g fill:#1aab6b,stroke:#138a55,color:#fff;
+  classDef k fill:#5b6577,stroke:#3d4452,color:#fff;
+  class CH,P,NEW,TR,CMP c; class PROMO g; class KEEP k;
+</pre>
+<div class="capt">A model can only ever be replaced by a <b>better</b> one. The quality floor never drops.</div></div>
+<div class="eli5">It's like always keeping a trainee learning beside the expert. The trainee only takes
+over when they've clearly proven they're better — otherwise the proven expert keeps the job.</div>
+</section>
+
+<!-- ================= GAP ================= -->
+<section id="gap">
+<h2><span class="em">🔓</span>The one thing left to unlock full value</h2>
+<div class="card" style="border-color:var(--brand);border-width:2px">
+  <span class="pill p-warn">Action needed — from you, not the engineers</span>
+  <h3>Give us real money &amp; shelf-life numbers</h3>
+  <p>Everything is built and working. But the order quantities currently assume <b>every product has the
+  same 35% margin and spoils in 1 day</b>. That's a placeholder. With identical economics, the smart
+  order formula can't show its full power — it just orders near the middle for everything.</p>
+  <p>The moment you provide three real numbers per product (or per category), high-margin and long-life
+  items will earn safety stock while perishables stay lean — automatically, with <b>no code change</b>.</p>
+  <table>
+    <tr><th>What we need</th><th>Meaning (plain)</th><th>Who has it</th></tr>
+    <tr><td><b>Gross margin</b></td><td>profit % on each item</td><td>Finance</td></tr>
+    <tr><td><b>Shelf-life (days)</b></td><td>1 = spoils same day; 90 = frozen; ∞ = ambient</td><td>Operations</td></tr>
+    <tr><td><b>Salvage %</b></td><td>money recovered on unsold (markdown/staff meals)</td><td>Operations</td></tr>
+  </table>
+  <p style="margin-top:14px" class="tag">Drop them into one small file (<code>data/product_econ.csv</code>),
+  re-run the order step, done. This is the difference between "a good demo" and "saving real money."</p>
+</div>
+
+<h3>Backlog — nice-to-haves, not blockers</h3>
+<div class="grid g3">
+  <div class="kpi"><div class="l" style="font-size:15px;color:var(--ink);font-weight:600">Specialist for rare items</div><div class="why">A Croston/SBA method for the lumpy 16% tail the main model is weak on.</div></div>
+  <div class="kpi"><div class="l" style="font-size:15px;color:var(--ink);font-weight:600">Squeeze a bit more accuracy</div><div class="why">Auto-tuning (Optuna) to push error below 0.319.</div></div>
+  <div class="kpi"><div class="l" style="font-size:15px;color:var(--ink);font-weight:600">Shop→warehouse routing</div><div class="why">Split the bake-list by which warehouse serves which shop.</div></div>
+</div>
+
+<div class="foot">
+  CFC Demand Forecasting · all 9 build phases complete · numbers from real backtest on 608,261
+  order-days (Apr–Jun 2026, never seen in training). Built with LightGBM + newsvendor on Microsoft
+  Fabric sales data. This page explains the system in plain language — for the technical runbook see
+  <code>HANDOFF.md</code>.
+</div>
+</section>
+</main>
+</div>
+
+<script>
+// ---- data baked from the project's real reports ----
+const C={brand:'#7c4dff',brand2:'#00b8a9',ink:'#1c2333',soft:'#cdd3e0',band:'rgba(124,77,255,.18)'};
+const monthly={labels:["Jan23","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan24","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan25","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan26","Feb","Mar","Apr","May","Jun"],
+  units:[1122229,995854,1190538,1263622,1339971,1274907,1465794,1505923,1351973,1438981,1241077,1435324,1344676,1249805,1361015,1333095,1374647,1346913,1480975,1492467,1452582,1585728,1394814,1524228,1429363,1214472,1359311,1264623,1277613,1301204,1399173,1486629,1489925,1509123,1401763,1743688,1711441,1482148,1781270,1574923,1598264,1212174]};
+// forecast vs actual (daily, Apr-Jun 2026) — sampled for clarity
+const fvaRaw={labels:["2026-04-01","2026-04-02","2026-04-03","2026-04-04","2026-04-05","2026-04-06","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-11","2026-04-12","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-18","2026-04-19","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-25","2026-04-26","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-01","2026-05-02","2026-05-03","2026-05-04","2026-05-05","2026-05-06","2026-05-07","2026-05-08","2026-05-09","2026-05-10","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-16","2026-05-17","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-23","2026-05-24","2026-05-25","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-05-30","2026-05-31","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-06","2026-06-07","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-13","2026-06-14","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-19","2026-06-20","2026-06-21","2026-06-22","2026-06-23"],
+  actual:[44664,45037,47080,48173,51593,46897,53726,50419,52697,58994,59360,67000,37004,36336,38963,38305,54734,54786,51620,47611,49138,47096,48215,48597,48353,49520,46760,47249,50981,51959,51672,46613,50912,44918,49624,45439,45318,44902,47130,49153,45899,45240,45462,45993,48691,46543,51993,44489,45371,44170,45373,44970,48013,51163,46787,46902,49644,51247,53522,53640,58950,46881,52215,48396,46383,48875,50059,58151,45332,46485,46452,45696,46347,51934,56625,46144,47106,46254,46205,47195,49452,54827,46943,47139],
+  p50:[52817,43397,44693,47127,48991,42540,44037,43845,42958,47323,53627,58811,43354,39202,37698,38900,42710,48868,50603,45476,46260,47165,45516,46454,47588,49416,43442,45809,49323,47941,49585,49274,50919,43452,44539,43842,43047,43205,45700,48504,40224,42202,41529,42162,43334,46355,48196,41633,42366,41751,41647,42309,44360,47621,41455,42231,44697,47423,47144,50702,57192,43371,45485,43859,44192,45048,49847,52773,43071,43994,42876,43481,44924,48785,53125,42464,43565,43219,44087,45193,48387,51921,42117,41666],
+  p85:[88743,69594,71314,74209,77035,68915,70771,68132,66590,74473,84997,91589,78291,66469,65945,62284,72974,75827,75823,71619,71953,72436,69491,68585,70698,73063,67598,70771,74416,74720,73977,71764,73905,63570,65791,64915,64065,64187,68024,71333,59256,61600,60930,61747,63571,67350,69168,60401,60725,60214,60865,61411,65270,68344,61559,61615,68025,71378,65435,70673,78230,63579,67732,64167,65742,66021,72205,76882,62308,62985,61791,62465,65089,69438,74867,61187,62099,61560,62254,64186,68562,72742,59291,57546]};
+const bycat=[{cat:"Common",wmape:0.297,floor:0.358},{cat:"Seasons",wmape:0.372,floor:0.44},{cat:"Bistro",wmape:0.394,floor:0.457},{cat:"Gong Cha",wmape:0.576,floor:0.639}];
+const abc=[{c:"A (best-sellers)",w:0.291,f:0.349},{c:"B (medium)",w:0.456,f:0.534},{c:"C (rare)",w:0.640,f:0.733}];
+// [name, total units actually sold, forecast error] — sorted by units sold
+const sku=[["Golden Chicken Floss",302171,.158],["Egg Pudding",197915,.237],["Croissant 6'S",174010,.222],
+  ["Today's Brew",146266,.221],["Chicken Nugget Mini",115720,.237],["Shrimp Cutlet Mini Burger",89111,.204],
+  ["Hot Dog Bun",88851,.247],["Chocolate Eclair",80928,.287],["Chocolate Bun",68933,.265],
+  ["Tuna & Sweet Corn Sandwich",66600,.285]];
+
+const baseOpt=(extra={})=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},...extra});
+const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'k':n;
+
+new Chart(monthly.id='monthly',{type:'bar',data:{labels:monthly.labels,
+  datasets:[{data:monthly.units,backgroundColor:C.brand,borderRadius:4}]},
+  options:baseOpt({scales:{y:{ticks:{callback:fmt},grid:{color:'#eef0f6'}},x:{ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:14},grid:{display:false}}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw)+' units'}}}})});
+
+new Chart('abc',{type:'bar',data:{labels:abc.map(x=>x.c),
+  datasets:[{label:'Model',data:abc.map(x=>x.w),backgroundColor:C.brand,borderRadius:5},
+            {label:'Simple guess',data:abc.map(x=>x.f),backgroundColor:C.soft,borderRadius:5}]},
+  options:baseOpt({scales:{y:{ticks:{callback:v=>(v*100)+'%'},grid:{color:'#eef0f6'},title:{display:true,text:'error (lower=better)'}},x:{grid:{display:false}}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(c.raw*100).toFixed(1)+'%'}}}})});
+
+new Chart('fva',{type:'line',data:{labels:fvaRaw.labels,datasets:[
+  {label:'Safe (P85)',data:fvaRaw.p85,borderColor:'#c9b8ff',backgroundColor:C.band,fill:true,pointRadius:0,borderWidth:1,tension:.3},
+  {label:'Actual',data:fvaRaw.actual,borderColor:C.ink,pointRadius:0,borderWidth:2.4,tension:.3},
+  {label:'Prediction',data:fvaRaw.p50,borderColor:C.brand,pointRadius:0,borderWidth:2.2,tension:.3}]},
+  options:baseOpt({interaction:{mode:'index',intersect:false},scales:{y:{ticks:{callback:fmt},grid:{color:'#eef0f6'},title:{display:true,text:'units/day (all shops)'}},x:{ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:10},grid:{display:false}}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}}})});
+
+new Chart('sku',{type:'bar',data:{labels:sku.map(x=>x[0]),datasets:[
+  {label:'Actually sold',data:sku.map(x=>x[1]),backgroundColor:C.soft,borderRadius:5,xAxisID:'x'},
+  {label:'Accuracy',data:sku.map(x=>+((1-x[2])*100).toFixed(1)),backgroundColor:C.brand2,borderRadius:5,xAxisID:'x2'}]},
+  options:baseOpt({indexAxis:'y',scales:{
+    x:{position:'bottom',ticks:{callback:fmt},grid:{color:'#eef0f6'},title:{display:true,text:'units actually sold'}},
+    x2:{position:'top',min:0,max:100,ticks:{callback:v=>v+'%'},grid:{display:false},title:{display:true,text:'forecast accuracy %'}},
+    y:{grid:{display:false}}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label==='Accuracy'?'Accuracy: '+c.raw+'%':'Sold: '+fmt(c.raw)+' units'}}}})});
+
+// mermaid diagrams (light theme)
+mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{
+  fontFamily:'-apple-system,Segoe UI,Roboto,sans-serif',fontSize:'15px',
+  lineColor:'#9aa3b5',primaryColor:'#f0f2f8',primaryTextColor:'#1c2333',primaryBorderColor:'#cdd3e0'}});
+
+// scrollspy
+const links=[...document.querySelectorAll('nav a')];
+const secs=links.map(a=>document.querySelector(a.getAttribute('href')));
+addEventListener('scroll',()=>{let i=secs.findIndex((s,k)=>s&&s.getBoundingClientRect().top>120);
+  if(i<0)i=secs.length;i=Math.max(0,i-1);links.forEach(l=>l.classList.remove('on'));links[i]&&links[i].classList.add('on');});
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+fold 2026-04: train 7,721,315 test 232,188 done
+fold 2026-05: train 7,953,503 test 223,808 done
+fold 2026-06: train 8,177,311 test 152,265 done
+# CFC Bakery — Backtest & Business Sim (Phase 6)
+
+Rolling-origin, 3 expanding folds: 2026-04, 2026-05, 2026-06. Retrained per fold.
+Test rows pooled: 608,261.
+
+## Accuracy — point forecast (pooled, volume-weighted WMAPE)
+
+| Model | WMAPE | MAE | Bias |
+|---|---|---|---|
+| LGBM P50 | 0.341 | 2.29 | -0.41 |
+| moving_avg_7 | 0.405 | 2.72 | +0.15 |
+| naive_lag1 | 0.453 | 3.04 | +0.16 |
+| seasonal_naive_7 | 0.537 | 3.60 | +0.26 |
+| dow_mean_28 | 0.468 | 3.14 | +0.25 |
+
+**LGBM P50 vs floor: 0.341 vs 0.405 (+16%).** Stretch target ≤0.321.
+
+## Per-fold WMAPE (LGBM P50 vs floor) — stability check
+
+| Fold | LGBM | floor | improv |
+|---|---|---|---|
+| 2026-04 | 0.384 | 0.497 | +23% |
+| 2026-05 | 0.325 | 0.360 | +10% |
+| 2026-06 | 0.305 | 0.345 | +12% |
+
+## LGBM P50 by ABC class
+| Class | WMAPE | floor | improv | vol share |
+|---|---|---|---|---|
+| A | 0.291 | 0.349 | +17% | 75% |
+| B | 0.456 | 0.534 | +15% | 19% |
+| C | 0.640 | 0.733 | +13% | 5% |
+
+## Quantile calibration + pinball loss
+| Quantile | coverage | target | pinball |
+|---|---|---|---|
+| P50 | 56.7% | 50% | 1.145 |
+| P85 | 85.4% | 85% | 0.827 |
+| P95 | 94.5% | 95% | 0.446 |
+
+## Business simulation — newsvendor (GM=35%, full spoilage)
+
+Order placed per (branch,product,day); compared to realised demand on the backtest folds.
+Cost = lost margin on stockouts + spoilage on overstock.
+
+| Order policy | total cost (₭) | stockout% | waste% | fill% | avg order |
+|---|---|---|---|---|---|
+
+| baseline (moving_avg_7) | 3,706,158,135 | 31.7 | 20.8 | 81.0 | 6.86 |
+| LGBM P50 | 2,936,968,955 | 34.2 | 14.8 | 80.0 | 6.30 |
+| LGBM P85 | 6,066,010,680 | 10.6 | 33.2 | 93.8 | 9.42 |
+| LGBM P95 | 10,068,618,740 | 4.1 | 45.7 | 97.3 | 12.04 |
+| LGBM newsvendor (CR=0.35) | 3,048,098,715 | 54.1 | 8.0 | 60.4 | 4.41 |
+
+**Lowest-cost policy: LGBM P50** — ₭2,936,968,955 vs baseline ₭3,706,158,135 → **21% cost cut** over 608,261 order-days.
+Note: ₭ cost is on the backtest test window; scales with full network/year.
+
+
+wrote reports/eval.md + data/predictions/backtest_preds.parquet

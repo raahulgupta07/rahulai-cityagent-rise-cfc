@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset=utf8><title>CFC Demand Forecasting — Ops Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root{--bg:#0f1117;--card:#1a1d27;--ink:#e8eaf0;--mut:#8b90a0;--acc:#ff8a4c;--ok:#46c98b;--warn:#ffcf5c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px}
+h1{font-size:22px;margin:0 0 2px}.sub{color:var(--mut);margin-bottom:22px}
+.grid{display:grid;gap:16px}.k{grid-template-columns:repeat(6,1fr)}.two{grid-template-columns:1fr 1fr}
+.card{background:var(--card);border:1px solid #262a36;border-radius:14px;padding:16px}
+.kc .v{font-size:26px;font-weight:700}.kc .l{color:var(--mut);font-size:12px;margin-top:2px}
+.acc{color:var(--acc)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+h3{font-size:14px;margin:0 0 12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 4px;border-bottom:1px solid #262a36}
+th{color:var(--mut);font-weight:600}.r{text-align:right}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.b-warn{background:#3a2f12;color:var(--warn)}.b-ok{background:#16382a;color:var(--ok)}
+canvas{max-height:280px}
+</style></head><body><div class=wrap>
+<h1>CFC Bakery — Demand Forecasting & Ordering</h1>
+<div class=sub>CityFood Concepts · forecast → order → warehouse picklist · self-learning loop · <span id=meta></span></div>
+
+<div class="grid k" id=kpis></div>
+
+<div class="grid two" style="margin-top:16px">
+ <div class=card><h3>Forecast vs actual (daily, backtest)</h3><canvas id=trend></canvas></div>
+ <div class=card><h3>Accuracy by ABC class (WMAPE, lower=better)</h3><canvas id=abc></canvas></div>
+</div>
+
+<div class="grid two" style="margin-top:16px">
+ <div class=card><h3>Service level vs waste (the dial)</h3><canvas id=sweep></canvas></div>
+ <div class=card><h3>Drift monitor</h3><div id=drift></div></div>
+</div>
+
+<div class="card" style="margin-top:16px"><h3>Warehouse picklist — <span id=pickdate></span></h3><div id=pick></div></div>
+<div class=sub style="margin-top:18px">Demo econ (GM 35%, same-day spoilage). Edit data/product_econ.csv for real margin+shelf-life. See HANDOFF.md.</div>
+</div>
+<script>
+const D={"kpi": {"lgbm_wmape": 0.341, "floor_wmape": 0.405, "improve": 16, "champ_wmape": 0.319, "champ_ver": "v_20260424", "cover85": 85.4, "cover95": 94.5, "rows": 608261, "products": 284, "branches": 77}, "trend": {"labels": ["2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-18", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-09", "2026-05-10", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-16", "2026-05-17", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23"], "actual": [44664.0, 45037.0, 47080.0, 48173.0, 51593.0, 46897.0, 53726.0, 50419.0, 52697.0, 58994.0, 59360.0, 67000.0, 37004.0, 36336.0, 38963.0, 38305.0, 54734.0, 54786.0, 51620.0, 47611.0, 49138.0, 47096.0, 48215.0, 48597.0, 48353.0, 49520.0, 46760.0, 47249.0, 50981.0, 51959.0, 51672.0, 46613.0, 50912.0, 44918.0, 49624.0, 45439.0, 45318.0, 44902.0, 47130.0, 49153.0, 45899.0, 45240.0, 45462.0, 45993.0, 48691.0, 46543.0, 51993.0, 44489.0, 45371.0, 44170.0, 45373.0, 44970.0, 48013.0, 51163.0, 46787.0, 46902.0, 49644.0, 51247.0, 53522.0, 53640.0, 58950.0, 46881.0, 52215.0, 48396.0, 46383.0, 48875.0, 50059.0, 58151.0, 45332.0, 46485.0, 46452.0, 45696.0, 46347.0, 51934.0, 56625.0, 46144.0, 47106.0, 46254.0, 46205.0, 47195.0, 49452.0, 54827.0, 46943.0, 47139.0], "p50": [52817.0, 43397.0, 44693.0, 47127.0, 48991.0, 42540.0, 44037.0, 43845.0, 42958.0, 47323.0, 53627.0, 58811.0, 43354.0, 39202.0, 37698.0, 38900.0, 42710.0, 48868.0, 50603.0, 45476.0, 46260.0, 47165.0, 45516.0, 46454.0, 47588.0, 49416.0, 43442.0, 45809.0, 49323.0, 47941.0, 49585.0, 49274.0, 50919.0, 43452.0, 44539.0, 43842.0, 43047.0, 43205.0, 45700.0, 48504.0, 40224.0, 42202.0, 41529.0, 42162.0, 43334.0, 46355.0, 48196.0, 41633.0, 42366.0, 41751.0, 41647.0, 42309.0, 44360.0, 47621.0, 41455.0, 42231.0, 44697.0, 47423.0, 47144.0, 50702.0, 57192.0, 43371.0, 45485.0, 43859.0, 44192.0, 45048.0, 49847.0, 52773.0, 43071.0, 43994.0, 42876.0, 43481.0, 44924.0, 48785.0, 53125.0, 42464.0, 43565.0, 43219.0, 44087.0, 45193.0, 48387.0, 51921.0, 42117.0, 41666.0], "p85": [88743.0, 69594.0, 71314.0, 74209.0, 77035.0, 68915.0, 70771.0, 68132.0, 66590.0, 74473.0, 84997.0, 91589.0, 78291.0, 66469.0, 65945.0, 62284.0, 72974.0, 75827.0, 75823.0, 71619.0, 71953.0, 72436.0, 69491.0, 68585.0, 70698.0, 73063.0, 67598.0, 70771.0, 74416.0, 74720.0, 73977.0, 71764.0, 73905.0, 63570.0, 65791.0, 64915.0, 64065.0, 64187.0, 68024.0, 71333.0, 59256.0, 61600.0, 60930.0, 61747.0, 63571.0, 67350.0, 69168.0, 60401.0, 60725.0, 60214.0, 60865.0, 61411.0, 65270.0, 68344.0, 61559.0, 61615.0, 68025.0, 71378.0, 65435.0, 70673.0, 78230.0, 63579.0, 67732.0, 64167.0, 65742.0, 66021.0, 72205.0, 76882.0, 62308.0, 62985.0, 61791.0, 62465.0, 65089.0, 69438.0, 74867.0, 61187.0, 62099.0, 61560.0, 62254.0, 64186.0, 68562.0, 72742.0, 59291.0, 57546.0]}, "abc": [{"cls": "A", "lgbm": 0.291, "floor": 0.349, "vol": 75}, {"cls": "B", "lgbm": 0.456, "floor": 0.534, "vol": 19}, {"cls": "C", "lgbm": 0.64, "floor": 0.733, "vol": 5}], "sweep": [{"svc": 30, "stockout": 57.9, "waste": 6.8, "fill": 52.6, "cost": 3.31}, {"svc": 50, "stockout": 34.2, "waste": 14.8, "fill": 80.0, "cost": 2.94}, {"svc": 70, "stockout": 18.2, "waste": 25.6, "fill": 89.7, "cost": 4.4}, {"svc": 85, "stockout": 10.6, "waste": 33.2, "fill": 93.8, "cost": 6.07}, {"svc": 95, "stockout": 4.1, "waste": 45.7, "fill": 97.3, "cost": 10.07}], "pick": {"date": "2026-06-23", "rows": [{"name": "Golden Chicken Floss", "units": 2431, "outlets": 57}, {"name": "Croissant 6'S", "units": 1566, "outlets": 55}, {"name": "Egg Pudding", "units": 1472, "outlets": 58}, {"name": "Today's Brew", "units": 1242, "outlets": 54}, {"name": "Chicken Nugget Charcoal Mini Burge", "units": 836, "outlets": 55}, {"name": "Shrimp Cutlet Mini Buger Bun", "units": 680, "outlets": 51}, {"name": "Hot Dog Bun", "units": 606, "outlets": 55}, {"name": "Chocolate Eclair", "units": 605, "outlets": 54}, {"name": "Tuna & Sweet Corn Sandwich", "units": 524, "outlets": 55}, {"name": "Cheesy Cloud Bun", "units": 511, "outlets": 47}, {"name": "Butter Coconut Bun", "units": 507, "outlets": 57}, {"name": "Butter Raisin Bun", "units": 486, "outlets": 57}, {"name": "Butter Bun", "units": 485, "outlets": 48}, {"name": "Cheese Puff", "units": 478, "outlets": 43}, {"name": "Chocolate Bun", "units": 470, "outlets": 43}], "total_units": 29143, "total_products": 227}, "verdict": "RETRAIN RECOMMENDED"};
+document.getElementById('meta').textContent=D.kpi.rows.toLocaleString()+' test rows · '+D.kpi.products+' products · '+D.kpi.branches+' branches';
+const K=[['LGBM WMAPE',D.kpi.lgbm_wmape,'vs floor '+D.kpi.floor_wmape,'acc'],
+ ['Improvement','+'+D.kpi.improve+'%','over baseline','ok'],
+ ['Champion WMAPE',D.kpi.champ_wmape,D.kpi.champ_ver,'acc'],
+ ['P85 coverage',D.kpi.cover85+'%','target 85%','ok'],
+ ['P95 coverage',D.kpi.cover95+'%','target 95%','ok'],
+ ['Picklist/day',D.pick.total_units.toLocaleString(),D.pick.total_products+' products','acc']];
+document.getElementById('kpis').innerHTML=K.map(k=>`<div class="card kc"><div class="v ${k[3]}">${k[1]}</div><div class=l>${k[0]}</div><div class=l>${k[2]}</div></div>`).join('');
+
+new Chart(trend,{type:'line',data:{labels:D.trend.labels,datasets:[
+ {label:'actual',data:D.trend.actual,borderColor:'#e8eaf0',pointRadius:0,tension:.3},
+ {label:'P50',data:D.trend.p50,borderColor:'#ff8a4c',pointRadius:0,tension:.3},
+ {label:'P85',data:D.trend.p85,borderColor:'#46c98b',borderDash:[4,4],pointRadius:0,tension:.3}]},
+ options:{plugins:{legend:{labels:{color:'#8b90a0'}}},scales:{x:{ticks:{color:'#8b90a0',maxTicksLimit:8},grid:{color:'#222'}},y:{ticks:{color:'#8b90a0'},grid:{color:'#222'}}}}});
+
+new Chart(abc,{type:'bar',data:{labels:D.abc.map(a=>'Class '+a.cls+' ('+a.vol+'% vol)'),datasets:[
+ {label:'LGBM',data:D.abc.map(a=>a.lgbm),backgroundColor:'#ff8a4c'},
+ {label:'floor',data:D.abc.map(a=>a.floor),backgroundColor:'#3a3f4d'}]},
+ options:{plugins:{legend:{labels:{color:'#8b90a0'}}},scales:{x:{ticks:{color:'#8b90a0'},grid:{display:false}},y:{ticks:{color:'#8b90a0'},grid:{color:'#222'}}}}});
+
+new Chart(sweep,{data:{labels:D.sweep.map(s=>s.svc+'% svc'),datasets:[
+ {type:'line',label:'cost ₭B',data:D.sweep.map(s=>s.cost),borderColor:'#ff8a4c',yAxisID:'y',tension:.3},
+ {type:'bar',label:'stockout%',data:D.sweep.map(s=>s.stockout),backgroundColor:'#46c98b88',yAxisID:'y1'},
+ {type:'bar',label:'waste%',data:D.sweep.map(s=>s.waste),backgroundColor:'#ffcf5c88',yAxisID:'y1'}]},
+ options:{plugins:{legend:{labels:{color:'#8b90a0'}}},scales:{x:{ticks:{color:'#8b90a0'},grid:{display:false}},
+ y:{position:'left',ticks:{color:'#ff8a4c'},grid:{color:'#222'},title:{display:true,text:'cost ₭B',color:'#ff8a4c'}},
+ y1:{position:'right',ticks:{color:'#8b90a0'},grid:{display:false},title:{display:true,text:'%',color:'#8b90a0'}}}}});
+
+const warn=D.verdict.includes('RETRAIN');
+document.getElementById('drift').innerHTML=`<span class="badge ${warn?'b-warn':'b-ok'}">${D.verdict}</span>
+ <p style="color:#8b90a0;margin-top:12px">PSI on features + champion accuracy creep. Weather (rain/tmax) drifts seasonally (monsoon); the retrain trigger is sustained accuracy drift, not weather alone. Full table: reports/drift_monitor.md</p>`;
+
+document.getElementById('pickdate').textContent=D.pick.date;
+document.getElementById('pick').innerHTML='<table><tr><th>Product</th><th class=r>order units</th><th class=r>outlets</th></tr>'+
+ D.pick.rows.map(r=>`<tr><td>${r.name}</td><td class=r>${r.units.toLocaleString()}</td><td class=r>${r.outlets}</td></tr>`).join('')+'</table>';
+</script></body></html>

@@ -73,14 +73,18 @@ async def _unhandled(request: Request, exc: Exception):
 # ── health (deep: verifies the analytics store is reachable) ────────────────
 @app.get("/health")
 def health():
-    ok, detail = True, "ok"
+    # Process health: if the API is up and serving, ok=true. Whether the LOCAL analytics
+    # parquet is present is a SEPARATE signal (a fresh/Fabric-only deploy has no local
+    # parquet yet — that's normal, not unhealthy).
+    analytics_ready, detail = True, "ok"
     try:
         from deps.duck import healthcheck as _duck_health  # optional, if present
-        ok, detail = _duck_health()
+        analytics_ready, detail = _duck_health()
     except Exception:
-        # duck healthcheck is optional; a missing helper is not a failure signal
-        pass
-    return {"ok": ok, "service": "cfc-forecaster-api", "detail": detail}
+        analytics_ready = False
+        detail = "analytics helper unavailable"
+    return {"ok": True, "service": "cfc-forecaster-api",
+            "analytics_ready": analytics_ready, "detail": detail}
 
 
 for r in all_routers():

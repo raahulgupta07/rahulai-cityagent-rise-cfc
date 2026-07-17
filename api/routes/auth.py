@@ -40,6 +40,25 @@ def _is_prod() -> bool:
     return os.getenv("APP_ENV", "").lower().startswith("prod")
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Whether to set the Secure flag on the auth cookie.
+
+    CRITICAL: a Secure cookie is DROPPED by browsers over plain http on a non-localhost host
+    — which would make login silently fail (200 but no session) on an http://<ip> deploy.
+    So default to AUTO: Secure only when the client actually reached us over https
+    (honouring X-Forwarded-Proto from a TLS-terminating proxy). Override with COOKIE_SECURE.
+    """
+    ov = os.getenv("COOKIE_SECURE", "auto").strip().lower()
+    if ov in ("1", "true", "yes"):
+        return True
+    if ov in ("0", "false", "no"):
+        return False
+    xfp = request.headers.get("x-forwarded-proto", "")
+    if xfp:
+        return xfp.split(",")[0].strip() == "https"
+    return request.url.scheme == "https"
+
+
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response):
     if not has_credentials_configured():
@@ -56,7 +75,7 @@ def login(body: LoginBody, request: Request, response: Response):
     response.set_cookie(
         key=COOKIE_NAME, value=token,
         max_age=days * 86400,
-        httponly=True, samesite="lax", secure=_is_prod(), path="/",
+        httponly=True, samesite="lax", secure=_cookie_secure(request), path="/",
     )
     record_event(f"user:{ident['email']}", "login", ident["role"])
     return {"ok": True, "email": ident["email"], "role": ident["role"]}
@@ -110,7 +129,7 @@ def sso_login(request: Request):
         return RedirectResponse("/login?sso_error=discovery", status_code=303)
     resp = RedirectResponse(url, status_code=303)
     resp.set_cookie(_STATE_COOKIE, state, max_age=300, httponly=True,
-                    samesite="lax", secure=_is_prod(), path="/")
+                    samesite="lax", secure=_cookie_secure(request), path="/")
     return resp
 
 
@@ -135,7 +154,7 @@ def sso_callback(request: Request, code: str = "", state: str = ""):
     token = make_token(role, days=SESSION_DAYS, email=email)
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie(COOKIE_NAME, token, max_age=SESSION_DAYS * 86400,
-                    httponly=True, samesite="lax", secure=_is_prod(), path="/")
+                    httponly=True, samesite="lax", secure=_cookie_secure(request), path="/")
     resp.delete_cookie(_STATE_COOKIE, path="/")
     record_event(f"user:{email}", "sso_login", role)
     return resp

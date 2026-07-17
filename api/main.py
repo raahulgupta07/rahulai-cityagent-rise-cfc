@@ -72,6 +72,7 @@ async def _unhandled(request: Request, exc: Exception):
 
 # ── health (deep: verifies the analytics store is reachable) ────────────────
 @app.get("/health")
+@app.get("/api/health")
 def health():
     # Process health: if the API is up and serving, ok=true. Whether the LOCAL analytics
     # parquet is present is a SEPARATE signal (a fresh/Fabric-only deploy has no local
@@ -87,8 +88,13 @@ def health():
             "analytics_ready": analytics_ready, "detail": detail}
 
 
+# Mount every router TWICE: at root (/auth, /overview, …) AND under /api (/api/auth, …).
+# The SPA calls /api/*; a front proxy that strips /api hits the root mount, one that does
+# NOT strip hits the /api mount — so login works regardless of proxy config. Bulletproofs
+# the whole "/api prefix" class of deploy errors.
 for r in all_routers():
     app.include_router(r)
+    app.include_router(r, prefix="/api")
 
 # Warm the Overview snapshot cache in a SINGLE background thread at startup. This computes
 # the whole page payload once (and primes the Fabric ODBC connection in that same thread) so

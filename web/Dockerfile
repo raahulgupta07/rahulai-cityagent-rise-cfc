@@ -3,7 +3,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# npm ci needs a committed package-lock.json; the repo doesn't ship one, so fall back
+# to npm install on a fresh clone. (ci = reproducible when a lockfile is present.)
+RUN npm ci || npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 

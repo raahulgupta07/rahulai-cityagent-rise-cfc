@@ -20,22 +20,31 @@ import os, sys, pathlib
 import pyodbc
 import pandas as pd
 
-# --- load .env (no dep on python-dotenv) ---
+# --- load .env (no dep on python-dotenv; OPTIONAL — prod passes env via compose) ---
 ROOT = pathlib.Path(__file__).parent
-for line in (ROOT / ".env").read_text().splitlines():
-    line = line.strip()
-    if line and not line.startswith("#") and "=" in line:
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+_envf = ROOT / ".env"
+if _envf.exists():
+    for line in _envf.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
 
-SERVER   = os.environ["FABRIC_SERVER"]
-DATABASE = os.environ["FABRIC_DATABASE"]
+# Read with .get so importing this module (src/extract.py does) never crashes on a box
+# that only configures the LIVE read path (FABRIC_SQL_ENDPOINT). Missing extract creds
+# fail with a clear error at connect() time instead of an import-time KeyError.
+SERVER   = os.environ.get("FABRIC_SERVER", "")
+DATABASE = os.environ.get("FABRIC_DATABASE", "")
 SCHEMA   = os.environ.get("FABRIC_SCHEMA", "ods")
-USER     = os.environ["FABRIC_USER"]
-PASSWORD = os.environ["FABRIC_PASSWORD"]
+USER     = os.environ.get("FABRIC_USER", "")
+PASSWORD = os.environ.get("FABRIC_PASSWORD", "")
 
 
 def connect():
+    if not (SERVER and DATABASE and USER and PASSWORD):
+        raise RuntimeError(
+            "Fabric extract credentials missing — set FABRIC_SERVER, FABRIC_DATABASE, "
+            "FABRIC_USER, FABRIC_PASSWORD in the environment (.env / .env.prod).")
     # LANDMINE: Fabric redirect needs explicit ,1433 + Connection Timeout=30,
     # else 08001/(26) handshake-before-login error.
     conn_str = (

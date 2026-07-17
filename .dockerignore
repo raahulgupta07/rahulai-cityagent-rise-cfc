@@ -1,7 +1,10 @@
-# Keep the api build context (repo root) lean — these are volume-mounted or irrelevant.
+# Keep the root build context lean — these are volume-mounted or irrelevant.
+# NOTE: web/ SOURCE is deliberately INCLUDED (Dockerfile.single builds the SPA from it).
+# Only its heavy/host-specific artifacts are dropped. Excluding web/ entirely here broke
+# the single-container build whenever BuildKit (and its per-Dockerfile ignore file) was
+# off — the classic builder only honors THIS file.
 .git
 .gitignore
-web/
 data/
 models/
 reports/
@@ -17,5 +20,8 @@ __pycache__/
 *.docx
 *.~lock*
 node_modules/
+**/node_modules/
 .svelte-kit/
+**/.svelte-kit/
 build/
+web/build/

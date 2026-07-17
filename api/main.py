@@ -101,10 +101,18 @@ def health():
 #  - ALSO at root (/auth, …) ONLY in multi-container mode, so a proxy that strips /api still
 #    works. In single-container mode the root is reserved for the SPA, so we skip the root
 #    mount (avoids /accuracy, /data, … API routes shadowing the web pages of the same name).
+#  - SECURITY: every router except /auth gets a login gate (current_user). Login/logout/me/SSO
+#    must stay reachable pre-auth; everything else requires a valid cfc_token. Individual
+#    routes still layer require_role(...) on top for mutating/heavy actions.
+from fastapi import Depends as _Depends
+from deps.auth import current_user as _current_user
+
+_OPEN_PREFIXES = {"/auth"}
 for r in all_routers():
-    app.include_router(r, prefix="/api")
+    _deps = [] if r.prefix in _OPEN_PREFIXES else [_Depends(_current_user)]
+    app.include_router(r, prefix="/api", dependencies=_deps)
     if not SERVE_SPA:
-        app.include_router(r)
+        app.include_router(r, dependencies=_deps)
 
 # ONE startup background thread (pyodbc is not thread-safe → never run Fabric concurrently):
 #   1. hydrate local serving parquet from Fabric (so a fresh server needs no shipped data)
@@ -122,7 +130,7 @@ def _boot_background():
             log.warning("startup hydrate skipped", exc_info=False)
         try:
             from deps import duck, order_views
-            duck._con = None            # force DuckDB views to be rebuilt with the new parquet
+            duck.reset()                # close + rebuild DuckDB views with the new parquet
             order_views._registered = False
         except Exception:
             pass
@@ -144,12 +152,16 @@ app.on_event("shutdown")(_sched_stop)
 # ── single-container: serve the built SPA at / (must be LAST — catches all non-API paths) ──
 if SERVE_SPA:
     class _SPAStatic(StaticFiles):
-        """Serve static assets; fall back to index.html for client-side routes (SPA)."""
+        """Serve static assets; fall back to index.html for client-side routes (SPA).
+
+        EXCEPT /api/*: an unknown/mistyped API path must stay a 404 — returning the SPA
+        shell (200 HTML) to an API client makes JSON.parse fail confusingly downstream.
+        """
         async def get_response(self, path, scope):
             try:
                 return await super().get_response(path, scope)
             except StarletteHTTPException as exc:
-                if exc.status_code == 404:
+                if exc.status_code == 404 and not (path == "api" or path.startswith("api/")):
                     return await super().get_response("index.html", scope)
                 raise
 

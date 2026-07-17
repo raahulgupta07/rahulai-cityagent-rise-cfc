@@ -50,39 +50,32 @@ def _connect():
     return pyodbc.connect(cs, timeout=30)
 
 
-def _get_conn():
-    global _conn
-    with _lock:
-        if _conn is not None:
-            try:
-                _conn.cursor().execute("SELECT 1").fetchone()
-                return _conn
-            except Exception:
-                try: _conn.close()
-                except Exception: pass
-                _conn = None
-        _conn = _connect()
-        return _conn
-
-
 def q(sql: str, params: tuple = ()) -> list[dict]:
-    """Run a query against the Fabric SQL endpoint, return list[dict]. Reconnects once on failure."""
+    """Run a query against the Fabric SQL endpoint, return list[dict]. Reconnects once on failure.
+
+    THREAD SAFETY: pyodbc connections are NOT thread-safe, and sync FastAPI handlers run in
+    a threadpool — so the lock is held for the ENTIRE execute+fetch, serializing all Fabric
+    access through the one shared connection. (Previously the lock only covered connection
+    setup; two concurrent requests then executed on the same conn → SIGSEGV = full outage.)
+    """
+    global _conn
     for attempt in (1, 2):
-        try:
-            cur = _get_conn().cursor()
-            cur.execute(sql, params) if params else cur.execute(sql)
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
-        except Exception as exc:
-            global _conn
-            with _lock:
+        with _lock:
+            try:
+                if _conn is None:
+                    _conn = _connect()
+                cur = _conn.cursor()
+                cur.execute(sql, params) if params else cur.execute(sql)
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+            except Exception as exc:
                 try:
                     if _conn: _conn.close()
                 except Exception: pass
                 _conn = None
-            if attempt == 2:
-                log.warning("fabric query failed: %s", exc)
-                raise
+                if attempt == 2:
+                    log.warning("fabric query failed: %s", exc)
+                    raise
     return []
 
 

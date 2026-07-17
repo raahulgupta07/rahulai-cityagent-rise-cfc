@@ -8,11 +8,18 @@ Endpoints:
   GET  /pipeline/stream/{stage_id} — SSE live log of a stage run
 """
 from __future__ import annotations
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from services.runner import stages_with_status, stream_stage, _STAGE_BY_ID
 from deps import jobs as jobstore
+from deps.auth import current_user
+
+
+def _require_ops_for_live(guard: bool, user: dict) -> None:
+    """Real (guard=false) runs train models / hit Fabric — ops/admin only. Dry-runs stay open."""
+    if not guard and user["role"] not in ("ops", "admin"):
+        raise HTTPException(403, "Live pipeline runs require the ops or admin role")
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -53,8 +60,10 @@ async def run(
     cutoff: str | None = Query(None, description="train: window split date YYYY-MM-DD"),
     date: str | None = Query(None, description="predict: target date YYYY-MM-DD"),
     ref_cutoff: str | None = Query(None, description="monitor: reference cutoff"),
+    user: dict = Depends(current_user),
 ) -> JSONResponse:
     """Kick a stage. Returns immediately; stream output via GET /pipeline/stream/{stage_id}."""
+    _require_ops_for_live(guard, user)
     if stage_id not in _STAGE_BY_ID:
         return JSONResponse({"error": f"Unknown stage: {stage_id}"}, status_code=404)
     stage = _STAGE_BY_ID[stage_id]
@@ -78,8 +87,10 @@ async def stream(
     cutoff: str | None = Query(None),
     date: str | None = Query(None),
     ref_cutoff: str | None = Query(None),
+    user: dict = Depends(current_user),
 ):
     """SSE endpoint — streams stdout lines from a stage as text/event-stream."""
+    _require_ops_for_live(guard, user)
     params = _collect_params(cutoff, date, ref_cutoff)
 
     async def generator():

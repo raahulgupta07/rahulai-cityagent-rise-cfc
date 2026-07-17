@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { network, dates, type OutletRow } from '$lib/api/network';
   import ExplainButton from '$lib/ExplainButton.svelte';
   import Icon from '$lib/Icon.svelte';
@@ -151,7 +152,7 @@
         {#each visible as row, i}
           <tr
             class="border-b border-line last:border-0 hover:bg-bg transition cursor-pointer"
-            onclick={() => window.location.href = `/network/${row.outlet_id}?date=${selectedDate}`}
+            onclick={() => goto(`/network/${row.outlet_id}?date=${selectedDate}`)}
           >
             <td class="px-4 py-3 font-medium">{row.outlet_name}</td>
             <td class="px-4 py-3 text-muted">{row.brand || '—'}</td>

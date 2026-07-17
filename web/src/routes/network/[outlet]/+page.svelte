@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { outlet as fetchOutlet, dates, type SkuRow } from '$lib/api/network';
 
@@ -125,7 +126,7 @@
         {#each rows as row}
           <tr
             class="border-b border-line last:border-0 hover:bg-bg transition cursor-pointer"
-            onclick={() => window.location.href = `/network/${outletId}/${row.product_id}?date=${selectedDate}`}
+            onclick={() => goto(`/network/${outletId}/${row.product_id}?date=${selectedDate}`)}
           >
             <td class="px-4 py-3 font-medium max-w-xs truncate" title={row.product_name}>
               {row.product_name}

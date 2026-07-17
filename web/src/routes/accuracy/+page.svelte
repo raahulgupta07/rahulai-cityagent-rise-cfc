@@ -21,10 +21,21 @@
   let chartInst: any = null;
 
   onMount(load);
+  // Backend returns accuracy as a 0-1 FRACTION (1 - WMAPE) and change_7d in fraction
+  // points — normalise to 0-100 % once at load so grade()/chart/table all read %.
+  const pc = (x: number | null | undefined): number | null =>
+    x == null ? null : (x <= 1.5 ? x * 100 : x);
   async function load() {
     loading = true; error = null;
     try {
-      [summary, daily] = await Promise.all([accuracyApi.getSummary(), accuracyApi.getDaily(30)]);
+      const [s, d] = await Promise.all([accuracyApi.getSummary(), accuracyApi.getDaily(30)]);
+      if (s) {
+        s.latest_accuracy    = pc(s.latest_accuracy);
+        s.accuracy_7d_avg    = pc(s.accuracy_7d_avg);
+        s.accuracy_change_7d = s.accuracy_change_7d == null ? null : s.accuracy_change_7d * 100;
+      }
+      if (d) d.rows = d.rows.map(r => ({ ...r, accuracy: r.accuracy == null ? r.accuracy : (r.accuracy <= 1.5 ? r.accuracy * 100 : r.accuracy) }));
+      summary = s; daily = d;
     } catch (e) { error = String(e); } finally { loading = false; }
   }
 
@@ -38,12 +49,17 @@
   }
   let cg = $derived(grade(summary?.latest_accuracy ?? null));
 
-  function driftTone(d: string | null): string {
+  // Backend emits drift as a BOOLEAN (true = drifting); tolerate strings for forward-compat.
+  function driftTone(d: boolean | string | null): string {
     if (!d) return 'bg-line text-muted';
+    if (typeof d !== 'string') return 'bg-warn/15 text-warn';
     const s = d.toLowerCase();
     if (s.includes('drift')) return 'bg-warn/15 text-warn';
     if (s.includes('watch')) return 'bg-warn/10 text-warn';
     return 'bg-sage/15 text-sage';
+  }
+  function driftLabel(d: boolean | string | null): string {
+    return typeof d === 'string' ? d : 'detected';
   }
   function fmt1(v: number | null | undefined) { return v == null ? '—' : v.toFixed(1); }
   function fmt0(v: number | null | undefined) { return v == null ? '—' : Math.round(v).toLocaleString(); }
@@ -137,7 +153,7 @@
       <div class="flex items-center justify-between gap-3 mb-3">
         <div class="text-[11px] font-bold text-muted uppercase tracking-wide">Yesterday's accuracy</div>
         {#if summary.drift}
-          <span class="text-xs px-2.5 py-1 rounded-full font-medium {driftTone(summary.drift)}">drift · {summary.drift}</span>
+          <span class="text-xs px-2.5 py-1 rounded-full font-medium {driftTone(summary.drift)}">drift · {driftLabel(summary.drift)}</span>
         {/if}
       </div>
       <div class="flex items-center gap-5 flex-wrap">

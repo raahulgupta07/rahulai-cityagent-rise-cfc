@@ -126,7 +126,11 @@ def map_role(claims: dict) -> str:
         g = os.getenv(env_key, "").strip()
         if g and g in roles:
             return app_role
-    return os.getenv("OIDC_DEFAULT_ROLE", "viewer")
+    # CLAMP to a known role: a misconfigured OIDC_DEFAULT_ROLE (typo / not in ROLES) would
+    # make make_token() raise OUTSIDE the callback's try block → 500 on every SSO login.
+    default = os.getenv("OIDC_DEFAULT_ROLE", "viewer").strip().lower()
+    from deps.auth import ROLES
+    return default if default in ROLES else "viewer"
 
 
 def email_of(claims: dict) -> str:

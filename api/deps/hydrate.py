@@ -14,12 +14,21 @@ Not hydrated (not available in the LK_CFC_Sales SQL endpoint):
   - demand_panel (raw amount/txns)  -> Demand EDA stays "run a sync" until real data is loaded
 """
 from __future__ import annotations
-import logging, pathlib
+import logging, os, pathlib
 
 log = logging.getLogger(__name__)
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 PRED = ROOT / "data" / "predictions"
 RAW = ROOT / "data" / "raw"
+
+
+def _write_parquet(df, path: pathlib.Path) -> None:
+    """ATOMIC parquet write: tmp file + os.replace. A crash mid-write must never leave a
+    truncated file at the final path — every block guards on path.exists(), so a corrupt
+    partial write would otherwise never be repaired on later boots."""
+    tmp = path.with_name(path.name + ".tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
 
 
 def hydrate_from_fabric() -> None:
@@ -47,7 +56,7 @@ def hydrate_from_fabric() -> None:
             if len(dp):
                 dp["ProductName"] = "Product " + dp["ProductId"].astype(str)
                 dp["ProductCode"] = dp["ProductId"].astype(str)
-                dp.to_parquet(dp_path, index=False)
+                _write_parquet(dp, dp_path)
                 log.info("hydrate: wrote %s (%d products)", dp_path.name, len(dp))
         except Exception as exc:
             log.warning("hydrate dim_product failed: %s", exc)
@@ -61,7 +70,7 @@ def hydrate_from_fabric() -> None:
                 db["BranchCode"] = db["BranchId"].astype(str)
                 db["Address"] = db["branch_city"].astype(str)
                 db["Segment"] = db["Segment"].astype(str)   # brand must be string (OutletRow model)
-                db.to_parquet(db_path, index=False)
+                _write_parquet(db, db_path)
                 log.info("hydrate: wrote %s (%d branches)", db_path.name, len(db))
         except Exception as exc:
             log.warning("hydrate dim_branch failed: %s", exc)
@@ -83,7 +92,7 @@ def hydrate_from_fabric() -> None:
                     op["abc"] = "C"
                 op["price"] = op["price"].fillna(1.0)
                 op["abc"] = op["abc"].fillna("C")
-                op.to_parquet(op_path, index=False)
+                _write_parquet(op, op_path)
                 log.info("hydrate: wrote %s (%d rows from Fabric cfc_order_plan)", op_path.name, len(op))
         except Exception as exc:
             log.warning("hydrate order_plan failed: %s", exc)
@@ -102,7 +111,7 @@ def hydrate_from_fabric() -> None:
                 dm["discount"] = 0.0
                 dm["txns"] = 0
                 dm = dm[["DayKey", "BranchId", "ProductId", "net_units", "amount", "discount", "txns"]]
-                dm.to_parquet(dm_path, index=False)
+                _write_parquet(dm, dm_path)
                 log.info("hydrate: wrote %s (%d rows from Fabric cfc_features)", dm_path.name, len(dm))
         except Exception as exc:
             log.warning("hydrate demand_panel failed: %s", exc)
@@ -114,7 +123,7 @@ def hydrate_from_fabric() -> None:
                 "SELECT date,BranchId,ProductId,y,p50,p85,p95,fold,abc,ListPrice,"
                 "rmean_7,lag_1,lag_7,dow_mean_28 FROM cfc_backtest_preds"))
             if len(bt):
-                bt.to_parquet(bt_path, index=False)
+                _write_parquet(bt, bt_path)
                 log.info("hydrate: wrote %s (%d rows from Fabric cfc_backtest_preds)", bt_path.name, len(bt))
         except Exception as exc:
             log.warning("hydrate backtest_preds failed: %s", exc)

@@ -16,7 +16,9 @@ import asyncio
 import json
 import pathlib
 from datetime import datetime
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from deps.auth import current_user
 
 router = APIRouter(prefix="/deploy", tags=["deploy"])
 
@@ -226,7 +228,14 @@ def _should_retrain() -> dict:
 
 
 @router.post("/check")
-async def check(auto: bool = Query(False, description="If true, kick a retrain in the background when warranted")):
+async def check(
+    auto: bool = Query(False, description="If true, kick a retrain in the background when warranted"),
+    user: dict = Depends(current_user),
+):
+    # auto=true fires a REAL background retrain — ops/admin only. Plain check stays open
+    # to any logged-in user (read-only analysis).
+    if auto and user["role"] not in ("ops", "admin"):
+        raise HTTPException(403, "Auto-retrain requires the ops or admin role")
     decision = _should_retrain()
     decision["triggered"] = False
     if auto and decision["should_retrain"]:

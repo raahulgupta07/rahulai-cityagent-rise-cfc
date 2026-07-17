@@ -1,0 +1,9 @@
+# web/ build context (web/Dockerfile does COPY . .) — NEVER let the host's
+# node_modules (built for another OS/arch) clobber the freshly-installed linux
+# node_modules in the image, and keep the context lean.
+node_modules/
+build/
+.svelte-kit/
+.git
+.env
+.env.*

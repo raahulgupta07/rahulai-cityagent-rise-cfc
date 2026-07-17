@@ -21,9 +21,11 @@ import json
 import pathlib
 import shutil
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
+
+from deps.auth import require_role
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -415,7 +417,7 @@ def evidence(version: str):
 
 
 @router.post("/{version}/rerun")
-def rerun(version: str):
+def rerun(version: str, user: dict = Depends(require_role("ops", "admin"))):
     """Kick a retrain reusing this version's training window (cutoff).
 
     Returns a run descriptor the client streams via /pipeline/stream/retrain.
@@ -435,7 +437,7 @@ def rerun(version: str):
 
 
 @router.post("/{version}/promote")
-def promote(version: str):
+def promote(version: str, user: dict = Depends(require_role("ops", "admin"))):
     """Approve a challenger → make it the live champion (human-in-the-loop gate).
 
     Fabric mode (USE_FABRIC + trigger configured): fires the notebook MODE=promote,
@@ -485,7 +487,7 @@ def promote(version: str):
 
 
 @router.post("/{version}/reject")
-def reject(version: str):
+def reject(version: str, user: dict = Depends(require_role("ops", "admin"))):
     """Reject a challenger — record the decision, leave the champion untouched.
 
     The challenger stays registered (promoted=False) in the Fabric registry for audit;

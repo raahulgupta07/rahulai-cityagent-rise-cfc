@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { orderApi, type PicklistRow, type PicklistResponse, type DialPoint } from '$lib/api/order';
   import { api } from '$lib/api';
@@ -331,7 +332,7 @@
         {#each visible as row}
           <tr
             class="border-b border-line last:border-0 hover:bg-bg transition cursor-pointer"
-            onclick={() => window.location.href = `/ordering/product/${row.product_id}?date=${selectedDate}`}
+            onclick={() => goto(`/ordering/product/${row.product_id}?date=${selectedDate}`)}
           >
             <td class="px-4 py-3 font-medium max-w-[280px] truncate" title={row.product_name}>
               {row.product_name}

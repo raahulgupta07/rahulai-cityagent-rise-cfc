@@ -14,7 +14,7 @@ async function get<T>(path: string, params?: Record<string, string | number | un
 // One day of scored forecast-vs-actual.
 export type AccuracyRow = {
   dt: string;          // YYYY-MM-DD
-  accuracy: number;    // 0-100 (%)
+  accuracy: number;    // 0-1 FRACTION (1 - WMAPE) — scale ×100 for display
   units_off: number;   // mean absolute units the forecast missed by, per series
   n_rows: number;      // series scored that day
   wmape: number;       // 0-1
@@ -26,11 +26,11 @@ export type AccuracyDaily = {
 };
 
 export type AccuracySummary = {
-  latest_accuracy: number | null;     // most recent day's accuracy %
-  accuracy_7d_avg: number | null;     // trailing 7-day mean accuracy %
-  accuracy_change_7d: number | null;  // latest vs 7d avg, in points
+  latest_accuracy: number | null;     // most recent day's accuracy, 0-1 FRACTION
+  accuracy_7d_avg: number | null;     // trailing 7-day mean, 0-1 FRACTION
+  accuracy_change_7d: number | null;  // latest-week vs prior-week, fraction points
   units_off: number | null;           // typical daily miss, units
-  drift: string | null;               // "stable" | "watch" | "drifting" | …
+  drift: boolean | string | null;     // backend emits boolean; strings tolerated
   source: string;
 };
 

@@ -33,8 +33,14 @@
     return email.slice(0, 2).toUpperCase();
   }
 
-  // active page title/subtitle for the topbar
-  let active = $derived(NAV.find(n => n.href === $page.url.pathname));
+  // active page title/subtitle for the topbar. Exact match first; else the LONGEST
+  // nav prefix wins so drill pages (/network/{id}, /ordering/product/{x}, …) keep
+  // their section's title instead of falling back to "Overview". '/' only matches itself.
+  let active = $derived(
+    NAV.find(n => n.href === $page.url.pathname) ??
+    [...NAV].filter(n => n.href !== '/' && $page.url.pathname.startsWith(n.href + '/'))
+            .sort((a, b) => b.href.length - a.href.length)[0]
+  );
   let title    = $derived(active?.label ?? 'Overview');
   let subtitle = $derived(active?.blurb ?? 'CFC bakery demand — plan, forecast, order');
 </script>

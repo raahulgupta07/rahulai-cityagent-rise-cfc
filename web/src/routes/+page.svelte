@@ -69,13 +69,17 @@
   const SYNC_STEPS = ['model & champion', 'accuracy & backtest', 'ordering & dial', 'drift & data sources'];
   let syncStep = $derived(Math.min(SYNC_STEPS.length - 1, Math.floor(syncElapsed / 8)));
 
+  let syncDenied = $state(false);   // POST /overview/sync is ops/admin-only → explain a 403
   async function syncLive() {
-    syncing = true; loadErr = false; syncElapsed = 0;
+    syncing = true; loadErr = false; syncDenied = false; syncElapsed = 0;
     const t = setInterval(() => syncElapsed += 1, 1000);
     try {
       const s = await overviewApi.sync();
       distribute(s.data || {}); cachedAt = s.cached_at; ageSec = s.age_seconds;
-    } catch { loadErr = true; }
+    } catch (e) {
+      if (String(e).includes('403')) syncDenied = true;   // not an outage — a role limit
+      else loadErr = true;
+    }
     finally { clearInterval(t); syncing = false; }
   }
 
@@ -187,6 +191,11 @@
       <button onclick={loadAll} class="pill bg-warn/12 text-warn border border-warn/25 cursor-pointer">
         <Icon name="refresh" class="w-3 h-3" /> retry
       </button>
+    {/if}
+    {#if syncDenied}
+      <span class="pill bg-warn/12 text-warn border border-warn/25" title="Ask an ops or admin user to sync — your role can only read the saved snapshot">
+        sync needs ops/admin role
+      </span>
     {/if}
     <span class="pill {health?.status === 'healthy' ? 'bg-sage/12 text-sage border border-sage/25' : 'bg-line text-muted'}">
       <span class="w-[7px] h-[7px] rounded-full {health?.status === 'healthy' ? 'bg-sage' : 'bg-muted'}"></span>

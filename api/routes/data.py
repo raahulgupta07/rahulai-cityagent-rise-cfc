@@ -15,7 +15,9 @@ from __future__ import annotations
 import io, pathlib, logging
 import duckdb
 import pandas as pd
-from fastapi import APIRouter, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+
+from deps.auth import current_user
 from fastapi.responses import StreamingResponse
 
 from services.templates import build_template
@@ -184,7 +186,12 @@ async def upload(
     key: str,
     file: UploadFile = File(...),
     accept: bool = Query(False),
+    user: dict = Depends(current_user),
 ):
+    # accept=true OVERWRITES a canonical input CSV (e.g. product_econ.csv drives order
+    # quantities) — ops/admin only. Validate-only stays open to any logged-in user.
+    if accept and user["role"] not in ("ops", "admin"):
+        raise HTTPException(403, "Accepting an upload requires the ops or admin role")
     """
     Validate (and optionally accept) an uploaded xlsx/csv.
 
@@ -220,12 +227,21 @@ async def upload(
                 "shelf_life_days":col_map.get("shelf_life_days"),
                 "salvage_frac":   col_map.get("salvage_frac"),
             }
-            # build output frame with only present columns
+            # build output frame with only present columns. NOTE: the validator only
+            # checks non-null ProductId rows, so a file can pass ok=True and still hold
+            # blank ProductId cells — coerce + drop those rows instead of 500ing on
+            # astype(int) (IntCastingNaNError).
             out = pd.DataFrame()
-            out["ProductId"] = df[out_cols["ProductId"]].astype(int) if out_cols["ProductId"] else None
+            if out_cols["ProductId"]:
+                pid = pd.to_numeric(df[out_cols["ProductId"]], errors="coerce")
+                keep = df[pid.notna()].reset_index(drop=True)
+                out["ProductId"] = pid.dropna().astype(int).values
+            else:
+                keep = df
+                out["ProductId"] = None
             for col in ["ListPrice", "gm", "shelf_life_days", "salvage_frac"]:
                 src = out_cols.get(col)
-                out[col] = df[src] if src else None
+                out[col] = keep[src].values if src else None
             out.to_csv(ECON, index=False)
             result["saved_to"] = str(ECON)
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { orderApi, type ByWarehouseResponse, type WarehouseGroup } from '$lib/api/order';
   import { api } from '$lib/api';
 
@@ -116,7 +117,7 @@
                 {#each wh.rows as row}
                   <tr
                     class="border-b border-line last:border-0 hover:bg-bg transition cursor-pointer"
-                    onclick={() => window.location.href = `/ordering/product/${row.product_id}?date=${selectedDate}`}
+                    onclick={() => goto(`/ordering/product/${row.product_id}?date=${selectedDate}`)}
                   >
                     <td class="px-5 py-2.5 font-medium max-w-[260px] truncate" title={row.product_name}>
                       {row.product_name}

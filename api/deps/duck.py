@@ -9,7 +9,7 @@ Forecast data stays in parquet (data/predictions, data/raw). Uploaded/business d
 lives in SQLite (deps/db.py). This module is the only reader of parquet.
 """
 from __future__ import annotations
-import logging, pathlib
+import logging, pathlib, threading
 import duckdb
 
 log = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ PRED = ROOT / "data" / "predictions"
 RAW = ROOT / "data" / "raw"
 
 _con: duckdb.DuckDBPyConnection | None = None
+_lock = threading.Lock()   # guards singleton create/reset (not queries — those use cursors)
 
 def con() -> duckdb.DuckDBPyConnection:
     """Singleton read-only connection with neutral views registered.
@@ -30,8 +31,14 @@ def con() -> duckdb.DuckDBPyConnection:
     Re-create views (pick up newly-arrived parquet) by restarting the API.
     """
     global _con
-    if _con is not None:
-        return _con
+    with _lock:
+        if _con is not None:
+            return _con
+        return _build()
+
+
+def _build() -> duckdb.DuckDBPyConnection:
+    global _con
     c = duckdb.connect(database=":memory:")
     op = (PRED / "order_plan.parquet").as_posix()
     bt = (PRED / "backtest_preds.parquet").as_posix()
@@ -66,11 +73,37 @@ def con() -> duckdb.DuckDBPyConnection:
     _con = c
     return _con
 
+
+def reset() -> None:
+    """Drop the singleton so the next con() rebuilds views over newly-arrived parquet.
+    Called by the boot thread after Fabric hydrate. Closes the old connection."""
+    global _con
+    with _lock:
+        old, _con = _con, None
+    try:
+        if old is not None:
+            old.close()
+    except Exception:
+        pass
+
+
 def q(sql: str, params: list | None = None):
-    """Run a query, return list[dict]."""
-    cur = con().execute(sql, params or [])
-    cols = [d[0] for d in cur.description]
-    return [dict(zip(cols, row)) for row in cur.fetchall()]
+    """Run a query, return list[dict].
+
+    THREAD SAFETY: a DuckDBPyConnection is not safe for concurrent .execute() — sync
+    FastAPI handlers run in a threadpool, so every call gets its OWN cursor (DuckDB's
+    documented pattern: .cursor() clones an independent connection to the same DB).
+    """
+    cur = con().cursor()
+    try:
+        res = cur.execute(sql, params or [])
+        cols = [d[0] for d in res.description]
+        return [dict(zip(cols, row)) for row in res.fetchall()]
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 def healthcheck() -> tuple[bool, str]:
@@ -80,7 +113,11 @@ def healthcheck() -> tuple[bool, str]:
     see a real readiness signal, not just 'process is up'.
     """
     try:
-        con().execute("SELECT 1 FROM forecast LIMIT 1").fetchone()
+        cur = con().cursor()
+        try:
+            cur.execute("SELECT 1 FROM forecast LIMIT 1").fetchone()
+        finally:
+            cur.close()
         return True, "ok"
     except Exception as exc:
         log.warning("duck healthcheck failed: %s", exc)

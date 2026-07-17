@@ -21,11 +21,12 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _fabric_connected() -> bool:
-    """Light probe: all four required env vars present (avoids a real network call)."""
-    return all(
-        os.getenv(k)
-        for k in ("FABRIC_SERVER", "FABRIC_DATABASE", "FABRIC_USER", "FABRIC_PASSWORD")
-    )
+    """Light probe: the live Fabric read layer is on + configured (avoids a network call).
+    Uses deps.fabric.enabled() — the SAME env vars the actual connection uses
+    (USE_FABRIC / FABRIC_SQL_ENDPOINT / FABRIC_USER / FABRIC_PASSWORD). Previously this
+    checked FABRIC_SERVER/FABRIC_DATABASE, which prod never sets → always 'disconnected'."""
+    from deps import fabric
+    return fabric.enabled()
 
 
 def _econ_status() -> dict:
@@ -95,7 +96,7 @@ def get_settings(user: dict = Depends(current_user)):
         "version":            "1.0.0",
         "auth_mode":          "dev-bypass" if os.getenv("AUTH_DISABLED") == "1" else "token",
         "fabric_connected":   _fabric_connected(),
-        "fabric_server":      os.getenv("FABRIC_SERVER", "(not set)"),
+        "fabric_server":      os.getenv("FABRIC_SQL_ENDPOINT", os.getenv("FABRIC_SERVER", "(not set)")),
         "econ":               _econ_status(),
         "schedule":           _schedule_summary(),
         "current_user":       user,

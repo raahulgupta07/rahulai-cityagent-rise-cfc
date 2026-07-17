@@ -134,7 +134,41 @@ def _should_run(job: dict, now: datetime, last_fired: dict) -> bool:
 
 
 def _run_job(job: dict) -> None:
-    """Spawn subprocess and update last_run/status. Blocking — called in background thread."""
+    """Spawn subprocess and update last_run/status. Blocking — called in background thread.
+
+    OVERLAP GUARD: run_now() and the scheduled path can both fire the same job; two
+    concurrent retrain subprocesses would write models/registry + champion.json at once
+    (corrupt registry). A per-job running flag makes the second start a no-op.
+    """
+    with _lock:
+        if job.get("_running"):
+            log.info("scheduler: job %s already running — skipped", job["id"])
+            return
+        job["_running"] = True
+    # Also take the SAME heavy-run slot the UI pipeline runner uses (deps/jobs.py) —
+    # otherwise a scheduled retrain can run concurrently with a UI-triggered one,
+    # two LightGBM trainings fighting for CPU + writing models/ at once.
+    try:
+        from deps import jobs as jobstore
+        got_heavy = jobstore.try_acquire_heavy()
+    except Exception:
+        jobstore, got_heavy = None, True   # jobs layer unavailable → run anyway
+    if not got_heavy:
+        log.info("scheduler: heavy slot busy — job %s skipped", job["id"])
+        with _lock:
+            job["_running"] = False
+            job["last_status"] = "skipped (another heavy run active)"
+        return
+    try:
+        _run_job_inner(job)
+    finally:
+        if jobstore is not None:
+            jobstore.release_heavy()
+        with _lock:
+            job["_running"] = False
+
+
+def _run_job_inner(job: dict) -> None:
     script = SRC / job["script"]
     extra_args = list(job["args"])
     if job["id"] == "nightly_predict":

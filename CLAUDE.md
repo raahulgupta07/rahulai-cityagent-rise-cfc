@@ -266,3 +266,38 @@ notebook: `python3 fabric/_build_notebook.py`. ★api image needs `pyarrow`+`pan
 - `PROJECT_PLAN.md` — 11-phase ML plan. `APP_BUILD_PLAN.md` — operator-app build log. `README.md` — status.
 - `src/extract.py` (staged, chunked, resumable, incremental fact sync), `src/eda.py`.
 - `reports/extract_qc.md`, `reports/demand_profile.md`.
+
+## 2026-07-18 — bug sweep + perf + FABRIC-ONLY ML (pushed `8fd0117` on main)
+- **App name = "City Agent RISE"** (Replenishment Intelligence & Stock Engine). GitHub
+  `raahulgupta07/rahulai-cityagent-rise-cfc`. **Publish flow**: local `dev` = full history;
+  `publish` branch = clean orphan mirror → `git checkout publish && git checkout dev -- <code paths>`
+  → commit → `git push origin publish:main`. NEVER push dev (it tracks business xlsx). origin/main
+  verified: zero xlsx/pptx/.env — only `.env.example`.
+- **DEFAULT stack = SINGLE container** (`docker-compose.yml` → `Dockerfile.single`): one process
+  serves SPA at `/` + API at `/api` on ${HTTP_PORT} (OpenWebUI-style, no proxy). Engineer upgrade =
+  `git pull && docker compose --env-file .env.prod up -d --build` (--build MANDATORY).
+- **Boot hydrate** (`api/deps/hydrate.py`): fresh server pulls cfc_* Fabric tables → local parquet
+  (atomic tmp+os.replace writes) → `duck.reset()` → overview snapshot warm. Zero shipped data.
+- **★★★AUTH GLOBAL GATE**: main.py mounts every router with `Depends(current_user)` EXCEPT the
+  `/auth` prefix. ops/admin required for: experiments promote/reject/rerun, pipeline run/stream
+  guard=false, `/agent/run` guard=false (guard now DEFAULTS TRUE), deploy check auto=true,
+  data upload accept=true, overview sync.
+- **★★★THREAD SAFETY**: `fabric.q()` holds its lock across the WHOLE execute+fetch (pyodbc shared
+  conn across threadpool = SIGSEGV). `duck.q()` uses per-call `con().cursor()`. Scheduler takes
+  `jobs.try_acquire_heavy()` + per-job running flag.
+- **★ACCURACY CONTRACT**: `/accuracy/*` returns accuracy as 0-1 FRACTION + `drift` as BOOLEAN.
+  Frontend scales ×100 at load (accuracy/+page.svelte `pc()`); do NOT change backend to percent —
+  Overview's `pct()` heuristic (`x<=1.5 ? x*100 : x`) would break on small change_7d values.
+- **PERF**: GZip middleware (`_GZipNoSSE` in main.py — MUST bypass `text/event-stream` or live SSE
+  logs stall) + `Cache-Control: immutable` on `_app/immutable/*`, `no-cache` on the shell.
+- **★★★ML RUNS ON FABRIC ONLY** (`api/services/fabric_ml.py`): when USE_FABRIC=1 +
+  FABRIC_WORKSPACE_ID/FABRIC_NOTEBOOK_ID configured, real runs of extract/sync/features/train/
+  retrain/backtest/predict/monitor fire the Fabric notebook (stage→MODE map; cutoff→CUTOFF,
+  date→PREDICT_DATE) and poll to completion. Wired ONCE at `runner.stream_stage` chokepoint
+  (covers pipeline page / Run Experiment real / Autopilot / deploy auto-retrain) + scheduler
+  `_run_job_fabric`. On success: drop stale parquet → hydrate → duck.reset → overview rebuild.
+  Local subprocess = fallback ONLY when Fabric unconfigured. `runs_on` field on /pipeline/stages
+  drives the "runs on Fabric" badge. `baselines`/`order` stay local (light transforms).
+- Unknown `/api/*` paths 404 (never the SPA shell). `web/.dockerignore` exists (host node_modules
+  must not clobber the linux install). Root `.dockerignore` KEEPS `web/` source (single build
+  works without BuildKit). `fabric_user_connector.py` reads env lazily (no import crash).

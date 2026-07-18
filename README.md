@@ -1,160 +1,180 @@
-# City Agent RISE
+# CityAI CFC — Bakery Demand Forecasting
 
-**RISE** = **R**eplenishment **I**ntelligence & **S**tock **E**ngine.
+ML demand forecasting for **CityFood Concepts (CFC)** bakery network — forecast daily demand per
+(outlet, product) and turn it into smart daily warehouse order quantities that cut both stockouts
+and waste. Brands: **Seasons** (85.5% of volume), NBH, Bistro, Gong Cha.
 
-AI demand forecasting + smart ordering for the **CityFood Concepts (CFC)** bakery network.
-Forecasts daily demand per (outlet × product), turns it into warehouse order quantities that
-cut both stockouts and waste, and serves the whole thing as a one-page operator dashboard.
-
-> This repo is **code only** — trained models, raw data, generated decks, and secrets are
-> excluded (`.gitignore`). Models regenerate from `src/train.py` or the Fabric notebook; live
-> data comes from Microsoft Fabric or files you provide. See **First run** below.
-
----
-
-## What it does
-
-- **Forecast** — LightGBM quantile model (P50/P85/P95) per outlet × product, leak-safe features
-  (lags, rolling stats, calendar, festivals, weather).
-- **Order** — newsvendor policy converts the forecast distribution into daily order quantities +
-  a warehouse picklist.
-- **Self-learn** — champion/challenger with drift monitoring; promote only on real accuracy gain.
-- **Operate** — one-page **Overview** (live snapshot cache), model leaderboard/evidence, smart
-  ordering, accuracy, monitoring, and a live "Run Experiment" pipeline.
-- **Access** — email/password login (env-based) + optional **Keycloak / OIDC SSO**.
-
----
-
-## Stack
-
-| Layer | Tech |
+## Status (2026-06-24)
+| Phase | State |
 |---|---|
-| Web | SvelteKit 5 (runes) + Tailwind (`web/`) |
-| API | FastAPI + DuckDB + pyodbc, 1 worker (`api/`) |
-| Engine | LightGBM + pandas + statsforecast (`src/*.py`) |
-| Heavy ML | Microsoft Fabric notebook (`fabric/`) |
-| Store | SQLite (`data/app.db`) + parquet (read via DuckDB) |
-| Proxy | Caddy (auto-TLS) |
+| 0 Setup & scope | ✅ done |
+| 1 Data extraction | ✅ done — 7.08M-row demand panel + 11 masters, validated |
+| 2 EDA & profiling | ✅ done — `reports/demand_profile.md` |
+| 3 Feature engineering | ✅ done — `data/features/train.parquet` (8.33M rows, 35 feats) |
+| 4 Baselines | ✅ done — floor WMAPE 0.401 (moving_avg_7), `reports/baselines.md` |
+| 5 Model (LightGBM quantile) | ✅ done — WMAPE 0.341 (+15% vs floor), `reports/model_lgbm.md` |
+| 6 Backtest & eval | ✅ done — walk-forward +16%, P50 −21% cost, `reports/eval.md` |
+| 7 Order qty (newsvendor) | ✅ done — order plan + picklist + tradeoff, `reports/order_policy.md` |
+| 8 Serving pipeline (self-learning) | ✅ done — retrain/predict/monitor, drift, `reports/drift_monitor.md` |
+| 9 Dashboard & handoff | ✅ done — `reports/dashboard.html` + `HANDOFF.md` |
 
----
+### Results so far
+- Baseline floor: moving_avg_7 = WMAPE **0.401** (Class-A 0.349).
+- LightGBM P50: WMAPE **0.341 overall (+15%)**, Class-A **0.291 (+17%)**.
+- Quantile calibration: P85 cover 85.5%, P95 cover 94.5% (well-calibrated → newsvendor-ready).
+- Models saved: `models/lgbm_p50|p85|p95.txt`.
+- Backtest (walk-forward, 3 folds, `reports/eval.md`): LGBM 0.341 vs floor 0.405 (+16%), stable
+  every fold + every ABC class. P85 cover 85.4%, P95 94.5%.
+- Business sim (newsvendor, GM 35%, full spoilage): **LGBM P50 lowest cost — ₭2.94B vs baseline
+  ₭3.71B = −21%** over 608k order-days. Finding: thin-margin/perishable → critical ratio 0.35 →
+  order near median; P85/P95 cut stockouts but waste cost dominates. Per-product CR = Phase 7.
+- Open: Croston for intermittent tail (16% vol), Optuna tuning (push past stretch target 0.321).
+
+### Phase 7 done — order quantity (newsvendor)
+`src/order_qty.py` — newsvendor per (branch,product,day): order = demand quantile at CR = Cu/(Cu+Co).
+CLI: `build` (order_plan.parquet + `reports/order_policy.md`), `picklist --date` (warehouse make-list
+CSV), `sweep` (service-vs-waste dial → `reports/service_tradeoff.md`).
+- Picklist e.g. 2026-06-20: 235 products, 33,859 units, ₭138M/day, with #outlets + ₭ value per SKU.
+- Sweep: cost-min at ~50% service (₭2.94B); 95% service cuts stockout to 4% but waste cost → ₭10B.
+- **Finding:** with FLAT demo econ (GM35%/same-day, every product same CR=0.35) newsvendor ≈ flat P50,
+  no gain. Value needs **per-product CR** → edit `data/product_econ.csv` with real margin + shelf-life
+  so high-margin/long-shelf SKUs earn safety stock, perishables stay lean.
+
+### Phase 8 done — self-learning pipeline + drift
+`src/pipeline.py` — champion/challenger loop. `retrain` (train + versioned registry + promote only if
+WMAPE gain ≥1%), `predict --date` (champion → nightly order plan), `monitor` (PSI data drift + WMAPE
+accuracy drift → retrain verdict). Registry `models/registry/<ver>/`, pointer `models/champion.json`.
+- Champion `v_20260424`: holdout WMAPE **0.319** (beats stretch ≤0.321).
+- Drift monitor caught monsoon weather shift (rain/tmax PSI high) but accuracy held (0.310) → loop
+  flags data drift while accuracy gate stays the real retrain trigger.
+
+### Phase 9 done — dashboard & handoff
+`src/dashboard.py` → `reports/dashboard.html` (self-contained, Chart.js): KPI cards, forecast-vs-actual
+trend, accuracy by ABC, service-vs-waste dial, top picklist, drift status. `HANDOFF.md` = runbook
+(daily/weekly commands, when to retrain, **how to plug real econ into `data/product_econ.csv`**).
+**All 9 build phases complete.** Only production gap = real per-product margin + shelf-life.
+
+## Data source
+Microsoft Fabric (user-login connector). Demand fact:
+`HUB_REPORTING_DB.edm.CFC_PBID_Sales_Summary` (grain: day × branch × product).
+Masters in `HUB_REPORTING_DB.cfc.*`. See `schema_cfc_bakery.md`.
+
+Extracted locally → `data/raw/`:
+- `demand_panel.parquet` — 7.08M rows, 2023-01-01→2026-06-23, 84 branches, 3,580 products.
+- 11 dim/master parquets (product, branch, warehouse, channel, segment, uom, etc.).
+- External signals: `data/external/weather_daily.csv` (3yr, 6 cities), `myanmar_holidays.csv` (festivals).
+
+## Key facts
+- Target = `net_units` (Quantity − Refund − Void).
+- 71% of volume = "smooth" series → LightGBM. 53% of series intermittent → Croston/SBA.
+- 99 products (3%) drive 80% of volume (Class A).
+- FG (finished goods) = 99.7% of units.
+- Festivals shift demand: public holiday +7%, Thingyan −8% (shops close).
+
+## Model strategy
+Segment → bake-off → best (not kitchen-sink ensemble):
+1. Route by series type — smooth/erratic → LightGBM; intermittent/lumpy → Croston/SBA.
+2. Bake-off in LightGBM universe (naive vs LightGBM vs tuned) on shared rolling-origin folds.
+3. Pick single best per segment; blend only if proven (uncorrelated errors + beats both).
+4. Production = champion/challenger — live model + shadow candidate, promote only if better.
+Score: WMAPE + pinball, volume-weighted (Class-A first).
+
+## Feature matrix
+`data/features/train.parquet` — 8.33M rows, 35 features, Class A+B FG (402 products × 84 branches),
+daily calendar zero-filled per active series, target col `y`. Leak-safe (lag/rolling shift≥1).
+Known: weather 9% null (CSV starts 2023-06-24). Optional fix pending.
 
 ## Repo layout
-
 ```
-api/            FastAPI app (routes/ self-register; deps/ = duck, fabric, auth, oidc, jobs)
-web/            SvelteKit app (routes/, lib/api clients, lib/nav)
-src/            ML engine — extract, features, train, backtest, order_qty, pipeline
-fabric/         Fabric notebook + build/push scripts (heavy training)
-deploy/         Caddyfile + AWS deploy guide (deploy/README.md)
-docker-compose.prod.yml   production stack (caddy + api + web)
-.env.example    config template  →  copy to .env.prod
+PROJECT_PLAN.md            full 11-phase build plan
+plan.md                    ML approach
+schema_cfc_bakery.md       data model (THE reference)
+pos_discovery.md           how the data was found
+metadata_CR_Transactions.md  loyalty ledger (out of scope)
+data_request_email.md      data-team request draft
+slides.html / .pdf         exec deck
+CLAUDE.md                  agent instructions
+fabric_user_connector.py   Fabric DB access (user login)
+fetch_weather.py, build_holidays.py
+src/
+  extract.py               staged extraction (small→fact, chunked, resumable)
+  eda.py                   demand profiling
+data/
+  raw/   external/   features/   predictions/
+reports/
+  extract_qc.md  demand_profile.md  figs/
 ```
 
----
-
-## Installation
-
-### Prerequisites
-- **Docker** + Docker Compose v2 (production / simplest), **or**
-- **Python 3.11** + **Node 18+** (local dev)
-
-### Option A — Docker (production / single host)
-
+## Running
 ```bash
-git clone git@github.com:raahulgupta07/rahulai-cityagent-rise-cfc.git
-cd rahulai-cityagent-rise-cfc
-
-cp .env.example .env.prod
-python3 -c "import secrets;print(secrets.token_hex(32))"   # → put in SECRET_KEY
-# edit .env.prod: SECRET_KEY, SUPERADMIN_EMAIL/PASSWORD, DOMAIN/ORIGIN, FABRIC_* (optional)
-
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# extract (per-table approval expected — see CLAUDE.md)
+python3 src/extract.py small      # masters
+python3 src/extract.py fact       # demand panel (chunked)
+# profile
+python3 src/eda.py
 ```
-Open the site, sign in with the superadmin email/password. Full AWS runbook: **[`deploy/README.md`](deploy/README.md)**.
 
-Local HTTP test (no domain): set `DOMAIN=:80`, `HTTP_PORT=8080` → `http://localhost:8080`.
+## Connection
+User-login (Entra email+password) via ODBC `ActiveDirectoryPassword`. Creds in `.env` (gitignored).
+Cross-DB queries work (`HUB_REPORTING_DB.*` from default DB). Landmine: needs `,1433` +
+`Connection Timeout=30` in conn string. Occasional 08001 handshake → retry wrapper handles it.
 
-> The API image is **baked** — after code changes, rebuild (`up -d --build api web`); a plain
-> restart serves stale code.
+---
 
-### Option B — Local dev (hot reload)
+## Operator app — "City Agent RISE" (web + api)
 
+**RISE = Replenishment Intelligence & Stock Engine.** Full-stack app on top of the engine
+(`APP_BUILD_PLAN.md` = build log; `CLAUDE.md` = conventions; `HANDOFF.md` = prod runbook).
+SvelteKit 5 + Tailwind (web/) · FastAPI + DuckDB (api/) · **SQLite** app store (users' actions /
+audit / jobs) · parquet forecast data, read-only via DuckDB.
+
+**Audience: Data Science team** — the UI shows the real technical terms (WMAPE, LightGBM quantile
+P50/P85/P95, newsvendor, PSI).
+
+**Design:** dark navy 248px rail, terracotta accent, Manrope + IBM Plex Mono, white rounded-14
+cards. Workspace nav: Overview · Data Explorer · Demand EDA · Accuracy · Model Leaderboard ·
+Model Evidence · Forecast Dashboard · Smart Ordering · Monitoring · Deploy & API · Settings.
+
+### How data + ML flow (2026-07 architecture)
+
+```
+Microsoft Fabric (source of truth + ALL heavy ML)
+  ├─ notebook CFC_ML_Pipeline: features/train/backtest/predict/monitor (Spark + LightGBM)
+  │    writes cfc_* tables to LK_CFC_Sales
+  ├─ app TRIGGERS the notebook (Job REST) and polls it — "runs on Fabric" badge
+  └─ boot hydrate: cfc_* → local parquet → DuckDB views → every screen
+App writes only: SQLite app store (audit/jobs/toggles) + snapshot cache + uploaded CSVs.
+```
+
+- **ML runs on Fabric ONLY** when `USE_FABRIC=1` + `FABRIC_WORKSPACE_ID`/`FABRIC_NOTEBOOK_ID`
+  are set: every real run (pipeline page, Run Experiment, Autopilot, scheduler, auto-retrain)
+  fires the notebook and re-hydrates local data on completion. Local subprocess lane is only
+  a fallback for dev boxes without Fabric creds.
+- **Champion promotion is human-approved** — new models register as challengers; you approve
+  on the Leaderboard.
+- **Auth**: login required on every endpoint (env-based accounts `SUPERADMIN_*` + `AUTH_USERS`,
+  roles viewer/ops/finance/admin; live runs + promote need ops/admin). Optional Keycloak SSO
+  (`OIDC_*` env, see Settings → SSO).
+- A fresh server needs **zero shipped data** — first boot pulls everything from Fabric (2-5 min).
+
+### Run — dev
 ```bash
-# API (terminal 1)
-cd api && pip install -r requirements.txt -r requirements-engine.txt
-AUTH_DISABLED=1 APP_ENV=dev python -m uvicorn main:app --port 8811
-
-# Web (terminal 2)
-cd web && npm install
-API_PROXY=http://127.0.0.1:8811 npm run dev -- --port 8812      # open http://localhost:8812
+cd api && AUTH_DISABLED=1 APP_ENV=dev python3 -m uvicorn main:app --port 8811
+cd web && API_PROXY=http://127.0.0.1:8811 node_modules/.bin/vite dev --port 8812   # open :8812
 ```
 
----
-
-## First run — where does data come from?
-
-The repo ships **no models or data**. Pick one:
-
-- **Live from Fabric (recommended)** — set `USE_FABRIC=1` + `FABRIC_*` creds in `.env.prod`. On
-  boot the app reads results from the Lakehouse `cfc_*` tables and caches them. Nothing to ship.
-- **Regenerate locally** — with a data source configured, rebuild the pipeline:
-  ```bash
-  python src/extract.py small && python src/extract.py fact   # Fabric → data/raw/
-  python src/features.py                                       # feature matrix
-  python src/train.py                                          # LightGBM P50/85/95 → models/
-  python src/backtest.py && python src/order_qty.py build      # eval + order policy
-  python src/pipeline.py retrain                               # register champion
-  ```
-
-With no data source and no local files, the dashboard is empty until you connect Fabric or upload.
-
----
-
-## Configuration (`.env.prod`)
-
-| Key | Purpose |
-|---|---|
-| `SECRET_KEY` | token signing — **required**, boot fails on default in prod |
-| `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | admin login |
-| `AUTH_USERS` | extra users `email:password:role,...` (viewer\|ops\|finance\|admin) |
-| `DOMAIN` / `ORIGIN` / `ALLOWED_ORIGINS` | public address + CORS (auto-TLS on a real domain) |
-| `USE_FABRIC` + `FABRIC_*` | live Microsoft Fabric reads / notebook jobs |
-| `OIDC_*` | Keycloak / OIDC SSO (off by default) |
-| `CFC_TRAIN_LEAN` / `CFC_MAX_ROWS` | in-container training memory guard |
-| `OPENROUTER_API_KEY` | optional LLM narration (OpenRouter only) |
-
-Secrets live in `.env.prod` only (gitignored). Never commit it.
-
----
-
-## Overview data — Refresh vs Sync
-
-The Overview loads instantly from a local snapshot (`data/cache/overview.json`), rebuilt in the
-background on boot:
-- **↻ Refresh** — re-read the saved snapshot (instant).
-- **Sync live** — pull fresh from Fabric + local and re-cache (~30s, with progress).
-
-Training is separate: **Run Experiment** streams a live step-by-step log.
-
----
-
-## SSO (Keycloak / OIDC)
-
-Off by default. Set `OIDC_ENABLED=1` + `OIDC_*` in `.env.prod`, register a confidential client in
-Keycloak with redirect URI `<ORIGIN>/api/auth/sso/callback`, rebuild the API. The login page then
-shows **Continue with Keycloak**; **Settings → Single Sign-On** reports status. Email login still works.
-
----
-
-## Tests
-
+### Run — production (Docker, SINGLE container = default)
 ```bash
-cd api && python3 -m pytest tests/ -q
+cp .env.example .env.prod   # set SECRET_KEY, SUPERADMIN_EMAIL/PASSWORD, HTTP_PORT, FABRIC_*
+docker compose --env-file .env.prod up -d --build
+# ONE container serves UI (/) + API (/api) on ${HTTP_PORT}. Health: http://<ip>:<port>/api/health
 ```
+Upgrade = `git pull origin main && docker compose --env-file .env.prod up -d --build`
+(**`--build` is required** — a plain restart serves the old baked image).
+Prod boot fails closed on a default/missing `SECRET_KEY` or `AUTH_DISABLED=1`.
+Alt stacks: `docker-compose.nginx.yml` / `docker-compose.prod.yml` (Caddy) / `deploy/up.sh`.
 
----
-
-## Deploy
-
-**AWS single-host runbook:** [`deploy/README.md`](deploy/README.md).
-Architecture, sizing, DNS/TLS, `.env.prod`, day-2 ops, backups.
+### Tests
+```bash
+cd api && python3 -m pytest tests/ -q     # routes, stores, upload validation, security posture
+```

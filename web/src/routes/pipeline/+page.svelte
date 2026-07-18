@@ -110,7 +110,12 @@
               <span class="inline-block w-2.5 h-2.5 rounded-full {statusDot(stage)}"></span>
             </td>
             <td class="py-3">
-              <div class="font-medium">{stage.label}</div>
+              <div class="font-medium flex items-center gap-2">
+                {stage.label}
+                {#if stage.runs_on === 'fabric'}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 font-mono" title="Real runs execute on the Microsoft Fabric notebook, next to the data — not on this server">runs on Fabric</span>
+                {/if}
+              </div>
               <div class="text-xs text-muted mt-0.5">{stage.description}</div>
             </td>
             <td class="py-3 text-muted text-xs hidden sm:table-cell">

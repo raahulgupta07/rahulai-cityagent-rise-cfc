@@ -144,6 +144,7 @@ def _stage_status(stage: dict) -> dict:
 
 
 def stages_with_status() -> list[dict]:
+    from services import fabric_ml
     result = []
     for s in STAGES:
         info = _stage_status(s)
@@ -154,6 +155,8 @@ def stages_with_status() -> list[dict]:
             "heavy": s["heavy"],
             "status": info["status"],
             "last_run": info["last_run"],
+            # where a REAL run executes: "fabric" (notebook next to the data) or "local"
+            "runs_on": "fabric" if fabric_ml.covers(s["id"]) else "local",
         })
     return result
 
@@ -213,6 +216,39 @@ async def stream_stage(
         yield f"[START] {stage['label']} (safe demo — simulated)"
         yield f"would build/run: {stage['description'].lower()}"
         yield "[DONE] simulated — turn off safe demo to run for real."
+        return
+
+    # ── FABRIC-FIRST: real ML runs execute on Fabric, not in this container ──
+    # (services/fabric_ml.py routes the stage to the notebook when configured;
+    #  every caller — pipeline page, experiments, agent, deploy auto-retrain —
+    #  goes through here, so all of them get the Fabric lane for free.)
+    from services import fabric_ml
+    if fabric_ml.covers(stage_id):
+        held_heavy = False
+        if stage["heavy"]:
+            if not jobs.try_acquire_heavy():
+                yield "[ERROR] Another heavy run is already in progress. Try again shortly."
+                return
+            held_heavy = True
+        job = jobs.new_job(stage_id, params, stage["heavy"], mode="fabric")
+        ok = True
+        try:
+            gen = fabric_ml.iter_run(stage_id, params)
+            while True:
+                # each blocking step (10s poll sleeps) runs off the event loop
+                line = await asyncio.to_thread(next, gen, None)
+                if line is None:
+                    break
+                if line.startswith("[ERROR]"):
+                    ok = False
+                yield line
+        except Exception as exc:
+            ok = False
+            yield f"[ERROR] {exc}"
+        finally:
+            jobs.finish_job(job["id"], 0 if ok else 1, None if ok else "fabric job failed")
+            if held_heavy:
+                jobs.release_heavy()
         return
 
     # Real run of a heavy stage → acquire the one-at-a-time slot.

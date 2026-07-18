@@ -168,7 +168,22 @@ def _run_job(job: dict) -> None:
             job["_running"] = False
 
 
+# scheduler job id -> pipeline stage id (for Fabric-first routing)
+_STAGE_OF_JOB = {"nightly_sync": "sync", "nightly_predict": "predict", "weekly_retrain": "retrain"}
+
+
 def _run_job_inner(job: dict) -> None:
+    # ── FABRIC-FIRST: when configured, scheduled ML runs on the Fabric notebook,
+    #    not as a local subprocess (same routing as the UI lanes). ──
+    try:
+        from services import fabric_ml
+        sid = _STAGE_OF_JOB.get(job["id"])
+        if sid and fabric_ml.covers(sid):
+            _run_job_fabric(job, sid)
+            return
+    except Exception as exc:
+        log.warning("scheduler: fabric routing check failed (%s) — falling back to local", exc)
+
     script = SRC / job["script"]
     extra_args = list(job["args"])
     if job["id"] == "nightly_predict":
@@ -197,6 +212,33 @@ def _run_job_inner(job: dict) -> None:
     try:
         from deps.audit import record_event
         record_event("system:scheduler", f"job_{status}", job["id"])
+    except Exception:
+        pass
+
+
+def _run_job_fabric(job: dict, stage_id: str) -> None:
+    """Run a scheduled job as a Fabric notebook run (blocking; logs each status line)."""
+    from services import fabric_ml
+    params = None
+    if job["id"] == "nightly_predict":
+        params = {"date": datetime.today().strftime("%Y-%m-%d")}
+    start = datetime.now()
+    status = "ok (fabric)"
+    log.info("scheduler: job %s → Fabric notebook", job["id"])
+    try:
+        for line in fabric_ml.iter_run(stage_id, params):
+            log.info("scheduler[%s]: %s", job["id"], line)
+            if line.startswith("[ERROR]"):
+                status = f"error (fabric): {line[8:][:150]}"
+    except Exception as exc:
+        status = f"exception (fabric): {exc}"
+        log.error("scheduler: fabric job %s raised: %s", job["id"], exc)
+    with _lock:
+        job["last_run"] = start.strftime("%Y-%m-%d %H:%M")
+        job["last_status"] = status
+    try:
+        from deps.audit import record_event
+        record_event("system:scheduler", f"job_{status[:40]}", job["id"])
     except Exception:
         pass
 

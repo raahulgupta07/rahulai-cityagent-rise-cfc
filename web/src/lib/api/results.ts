@@ -88,6 +88,7 @@ export type PipelineStage = {
   heavy: boolean;
   status: 'done' | 'pending' | 'running';
   last_run?: string;
+  runs_on?: 'fabric' | 'local';   // where a REAL run executes (fabric = notebook next to the data)
 };
 
 export type RunResult = {
